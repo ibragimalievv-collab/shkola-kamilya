@@ -1,0 +1,10 @@
+{
+  "name": "shkola-kamilya",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "program": "node tools/make-program.mjs",
+    "start": "python3 -m http.server 8123 --directory app"
+  }
+}

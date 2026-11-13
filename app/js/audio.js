@@ -26,11 +26,13 @@ const loaded = new Map();         // набор → звуковые данны�
 const loading = new Map();
 
 // Прочитать список наборов и загрузить общий набор (буквы, числа, слова, похвала).
-export async function initVoice() {
+let listReady = Promise.resolve(); // станет «готово», когда прочитан список наборов
+export function initVoice() { return (listReady = initVoiceNow()); }
+async function initVoiceNow() {
   try {
     manifest = await (await fetch('audio/manifest.json', { cache: 'no-cache' })).json();
     for (const [name, pack] of Object.entries(manifest.packs)) for (const [id, off, len] of pack.items) where.set(id, [name, off, len]);
-    await loadPack('common');
+    loadPack('common');
     // Убираем из памяти устройства наборы прошлых версий озвучки.
     if (typeof caches !== 'undefined') {
       const keep = new Set(Object.values(manifest.packs).map(p => p.file));
@@ -122,17 +124,40 @@ export function plan(text) {
   }
   return steps;
 }
+// Подождать, но не дольше заданного времени.
+const within = (promise, ms) => Promise.race([promise, new Promise(f => setTimeout(f, ms))]);
 // Сказать текст вслух. Новая фраза перебивает старую.
-export function say(text) {
+// Если нужные записи ещё загружаются (первый запуск, новый остров) — немного ждём их, а не говорим запасным голосом.
+export async function say(text) {
   if (silent || !text) return;
   hush();
-  const my = ++turn, steps = plan(text);
+  const my = ++turn;
+  await within(listReady, 5000);
+  const need = [...new Set(pieces(text).map(p => where.get(p.id)?.[0]).filter(n => n && !loaded.has(n)))];
+  if (need.length) await within(Promise.all(need.map(loadPack)), 12000);
+  if (my !== turn) return;
+  const steps = plan(text);
   const next = i => {
     if (my !== turn || i >= steps.length) return;
     const go = () => next(i + 1);
     if (steps[i].blob) playBlob(steps[i].blob, go); else speak(steps[i].text, go);
   };
   next(0);
+}
+// Планшеты разрешают звук только после нажатия. При первом нажатии «будим» проигрыватель короткой тишиной,
+// чтобы потом он мог заговорить, даже если запись пришлось подождать.
+let unlocked = false;
+export function unlockAudio() {
+  if (unlocked || !player) return;
+  unlocked = true;
+  const wav = new Uint8Array(44 + 800), v = new DataView(wav.buffer);
+  [[0, 0x52494646], [8, 0x57415645], [12, 0x666d7420], [36, 0x64617461]].forEach(([o, x]) => v.setUint32(o, x));
+  v.setUint32(4, 36 + 800, true); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); v.setUint32(40, 800, true);
+  wav.fill(128, 44);
+  player.src = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+  player.volume = 0;
+  player.play().catch(() => {});
 }
 export function hush() {
   turn++;

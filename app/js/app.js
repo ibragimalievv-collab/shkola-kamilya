@@ -245,7 +245,13 @@ async function selftest() {
 }
 
 // ---------- запуск ----------
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // Когда на устройство приехало обновление, перезапускаем приложение, чтобы оно не работало по старой копии.
+  // На заставке это незаметно; посреди занятия не перезапускаем — обновление применится при следующем открытии.
+  const hadOld = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadOld && app.classList.contains('welcome')) location.reload(); });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
+}
 // Для отладки: показать любые задания по рецептам, не трогая прогресс.
 window.__play = srcs => playLevel({ id: 'demo', island: 0, k: 0, intro: '', tasks: srcs, demo: true });
 loadClips();

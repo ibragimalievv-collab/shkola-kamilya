@@ -48,6 +48,7 @@ test('после первого открытия приложение работ
     },
     fetch: async r => { if (!online) throw new TypeError('нет сети'); return { ok: true, body: readFileSync(join(APP, norm(r))) }; },
     Promise,
+    Request: class { constructor(url) { this.url = url; } },
   };
   stores.set('старая-версия', new Map([['index.html', { body: 'старое' }]]));
   vm.runInNewContext(swText, sandbox);

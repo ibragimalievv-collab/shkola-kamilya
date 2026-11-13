@@ -21,7 +21,8 @@ export async function synth(text, voice, key = readKey()) {
   if (voice.role) hints.push({ role: voice.role });
   if (voice.speed) hints.push({ speed: String(voice.speed) });
   if (voice.pitch) hints.push({ pitchShift: String(voice.pitch) });
-  const body = { text, hints, outputAudioSpec: { containerAudio: { containerAudioType: 'MP3' } }, loudnessNormalizationType: 'LUFS' };
+  // model: 'livetts' — «живая» модель с разговорной интонацией (высоту и темп она не меняет)
+  const body = { ...(voice.model ? { model: voice.model } : {}), text, hints, outputAudioSpec: { containerAudio: { containerAudioType: 'MP3' } }, loudnessNormalizationType: 'LUFS' };
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(ENDPOINT, { method: 'POST', headers: { Authorization: `Api-Key ${key.apiKey}`, 'x-folder-id': key.folderId, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const raw = await res.text();

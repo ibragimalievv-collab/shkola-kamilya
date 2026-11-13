@@ -5,8 +5,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { synth, readKey } from './yandex.mjs';
 import { synthOpenAI, hasOpenAIKey } from './openai.mjs';
 
-const ROUND = process.argv[2] === '2' ? 2 : 1; // вторая проба: npm run voice:sample -- 2
-const OUT = new URL(ROUND === 2 ? '../../проба-голоса-2/' : '../../проба-голоса/', import.meta.url);
+const ROUND = +process.argv[2] || 1; // номер пробы: npm run voice:sample -- 3
+const OUT = new URL(ROUND > 1 ? `../../проба-голоса-${ROUND}/` : '../../проба-голоса/', import.meta.url);
 
 // Знак + стоит перед ударной гласной: так сервис ставит ударение точно.
 const SCENE = [
@@ -51,7 +51,18 @@ let SOUNDS = [
   ['Слог', 'ма'], ['Слово', 'м+ама'], ['Число', 'семнадцать'],
 ];
 
-if (ROUND === 2) SOUNDS.length = 0;
+// Третья проба: голоса как есть, без изменения высоты, и «живая» модель с разговорной интонацией.
+if (ROUND === 3) VARIANTS.splice(0, VARIANTS.length,
+  ['П', 'Маша, радостная, без изменений', { voice: 'masha', role: 'good' }],
+  ['Р', 'Даша, дружелюбная, без изменений', { voice: 'dasha', role: 'friendly' }],
+  ['С', 'Лера, дружелюбная, без изменений', { voice: 'lera', role: 'friendly' }],
+  ['Т', 'Марина, дружелюбная, без изменений', { voice: 'marina', role: 'friendly' }],
+  ['У', 'Джейн, радостная, без изменений', { voice: 'jane', role: 'good' }],
+  ['Ф', 'Софья, живая модель', { voice: 'sofia', model: 'livetts' }],
+  ['Х', 'Вера, живая модель', { voice: 'vera', model: 'livetts' }],
+  ['Ц', 'Ирина, живая модель', { voice: 'irina', model: 'livetts' }],
+  ['Ч', 'Денис, живая модель', { voice: 'denis', model: 'livetts' }]);
+if (ROUND > 1) SOUNDS.length = 0;
 let key = null;
 try { key = readKey(); } catch (e) { if (!hasOpenAIKey()) { console.error(e.message); process.exit(1); } console.log('Ключа Yandex нет — делаю пробу только вторым сервисом.'); }
 if (!key) VARIANTS.splice(0, 6);
@@ -86,4 +97,4 @@ p{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0}audio{fle
 <h1>Проба голоса</h1><p>Послушайте вместе с Камилем и выберите вариант по букве. Внизу — отдельная проба, как звучат звуки букв.</p>
 ${html}
 <script>function scene(id){let i=0;const next=()=>{const a=document.getElementById(id+i);if(!a)return;a.currentTime=0;a.onended=()=>{i++;next()};a.play()};next()}</script></html>`);
-console.log(`Готово: озвучено фраз — ${n}, это примерно ${(n * 0.1626).toFixed(2)} ₽. Откройте файл «проба-голоса/index.html».`);
+console.log(`Готово: озвучено фраз — ${n}, это примерно ${(n * 0.1626).toFixed(2)} ₽. Откройте файл «${decodeURIComponent(OUT.pathname.split('/').slice(-2, -1)[0])}/index.html».`);

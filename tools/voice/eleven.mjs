@@ -5,7 +5,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const KEY_FILE = new URL('../../ключ-elevenlabs.txt', import.meta.url);
-const OUT = new URL('../../проба-голоса-3/', import.meta.url);
+const OUT = new URL('../../проба-голоса-свой/', import.meta.url);
 if (!existsSync(KEY_FILE)) { console.error('Нет файла «ключ-elevenlabs.txt». Создайте его в папке проекта и вставьте в него ключ одной строкой.'); process.exit(1); }
 const apiKey = readFileSync(KEY_FILE, 'utf8').split(/\r?\n/).map(s => s.trim()).find(s => s && !s.startsWith('#'));
 if (!apiKey) { console.error('Файл «ключ-elevenlabs.txt» пустой: вставьте в него ключ.'); process.exit(1); }
@@ -48,4 +48,4 @@ writeFileSync(new URL('index.html', OUT), `<!DOCTYPE html><html lang="ru"><meta 
 section{background:#fff;border-radius:16px;padding:12px 16px;margin:14px 0;box-shadow:0 1px 4px #0002}h2{margin:4px 0 10px}
 p{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0}audio{flex:1;min-width:220px}</style>
 <h1>Проба голоса: придуманные мультяшные голоса</h1><p>Каждый голос создан с нуля по описанию. Выберите номер голоса, который понравился.</p>${html}</html>`);
-console.log(n ? `Готово: голосов для прослушивания — ${n}. Откройте файл «проба-голоса-3/index.html».` : 'Не получилось создать ни одного голоса — см. ошибки выше.');
+console.log(n ? `Готово: голосов для прослушивания — ${n}. Откройте файл «проба-голоса-свой/index.html».` : 'Не получилось создать ни одного голоса — см. ошибки выше.');

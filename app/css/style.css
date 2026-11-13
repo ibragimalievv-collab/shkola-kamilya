@@ -354,3 +354,14 @@ svg { display: block; width: 100%; height: 100%; }
   .pairs { gap: 4vmin; } .feed { flex-wrap: wrap; justify-content: center; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+/* --- поправки после проверки на телефоне: ничего мельче 44 точек под палец --- */
+.hands { min-height: 48px; min-width: 48px; }
+.sent { padding: .25em 0; line-height: 1.7; }
+.board-tools .color, .size, .tool-btn { width: clamp(44px, 7.5vmin, 60px); height: clamp(44px, 7.5vmin, 60px); }
+.food, .paintable { font-size: clamp(40px, 10vmin, 68px); min-width: 44px; min-height: 44px; }
+.opts.col .opt { min-height: 48px; }
+.chart.full .ccell { width: clamp(31px, min(8.6vw, 6.6dvh), 58px); height: clamp(31px, min(8.6vw, 6.6dvh), 58px); font-size: clamp(13px, min(4vw, 3dvh), 1.2em); }
+.ccell { min-width: 31px; min-height: 31px; }
+.dots { width: max(300px, min(96vw, 70dvh)); height: max(300px, min(96vw, 70dvh)); max-width: 96vw; }
+.task { flex-shrink: 0; min-height: min-content; }

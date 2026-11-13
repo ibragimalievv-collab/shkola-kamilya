@@ -4,7 +4,7 @@
 import { h } from './util.js';
 import { ORDER, WORDS } from './data.js';
 import { syllables } from './tasks.js';
-import { hasClip, saveClip, deleteClip, playClip, clipCount, voiceIsBasic, russianVoices } from './audio.js';
+import { hasClip, saveClip, deleteClip, playClip, clipCount, voiceIsBasic, russianVoices, hasRecordedVoice } from './audio.js';
 
 const GROUPS = [
   { title: 'Буквы', prefix: 'б:', tip: 'Произносите звук буквы коротко и чисто: «м», «с», «а». Для Ь и Ъ скажите «мягкий знак», «твёрдый знак», для Й — «и краткое».', items: () => ORDER.split('').map(L => ['б:' + L, L]) },
@@ -36,10 +36,10 @@ async function toggle(key, btn, refresh) {
 
 // Карточка для родительского раздела.
 export function voiceStudio() {
-  const basic = voiceIsBasic(), none = !russianVoices().length;
+  const rec = hasRecordedVoice(), basic = !rec && voiceIsBasic(), none = !rec && !russianVoices().length;
   const box = h('section', { class: 'pbox' }, h('h2', {}, 'Студия голоса: запишите своим голосом'),
-    h('p', {}, 'Голос приложения — это синтезатор речи самого устройства. Он может ошибаться в ударениях и неестественно называть буквы. '
-      + 'Самое важное для обучения — буквы и слоги — лучше записать своим голосом: это около десяти минут. Записи вставляются прямо в задания.'),
+    h('p', {}, rec ? 'Приложение говорит заранее записанным голосом. Если какую-то букву, слог или слово хочется слышать иначе — запишите их своим голосом: такая запись звучит вместо готовой.'
+      : 'Готовых записей голоса в приложении нет, поэтому говорит синтезатор речи самого устройства. Буквы и слоги лучше записать своим голосом: это около десяти минут.'),
     none ? h('p', { class: 'warn-text' }, 'На устройстве нет русского голоса: установите его в настройках устройства, иначе задания не будут озвучены.') : null,
     basic ? h('p', { class: 'warn-text' }, 'Сейчас на устройстве только базовый русский голос. В настройках устройства можно бесплатно загрузить голос лучшего качества: '
       + 'на iPad и iPhone — «Настройки → Универсальный доступ → Устный контент → Голоса → Русский», выберите голос с пометкой «улучшенный»; '

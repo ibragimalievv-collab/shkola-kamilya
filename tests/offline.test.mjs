@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const APP = fileURLToPath(new URL('../app/', import.meta.url));
 const walk = dir => readdirSync(dir).flatMap(f => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
-const onDisk = walk(APP).map(f => relative(APP, f).split('\\').join('/')).filter(f => !f.split('/').pop().startsWith('.') && f !== 'sw.js'); // служебные файлы с точкой в начале не считаем
+const onDisk = walk(APP).map(f => relative(APP, f).split('\\').join('/')).filter(f => !f.split('/').pop().startsWith('.') && f !== 'sw.js' && !f.startsWith('audio/')); // записи голоса сохраняются отдельно, по островам // служебные файлы с точкой в начале не считаем
 const swText = readFileSync(join(APP, 'sw.js'), 'utf8');
 const FILES = eval(/const FILES = (\[[\s\S]*?\]);/.exec(swText)[1]);
 

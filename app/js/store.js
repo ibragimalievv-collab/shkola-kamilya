@@ -17,7 +17,7 @@ const newProfile = name => ({
   gallery: [],              // последние рисунки ребёнка
   overrides: {},            // остров → 'open' | 'closed' (решение родителя)
 });
-const fresh = () => ({ v: 1, current: 'p1', profiles: { p1: newProfile('Камиль') }, settings: { voice: '', rate: 0.9, dailyLimit: 0 } });
+const fresh = () => ({ v: 1, current: 'p1', profiles: { p1: newProfile('Камиль') }, settings: { voice: '', rate: 0.9, dailyLimit: 0, volVoice: 1, volSfx: 1 } });
 
 export function createStore(storage) {
   let state;

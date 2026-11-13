@@ -3,7 +3,8 @@
 import { h, today, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { LINES, lineOf, labelOf } from './tasks.js';
-import { say, hush, russianVoices } from './audio.js';
+import { say, hush, sfx, russianVoices } from './audio.js';
+import { P } from './phrases.js';
 import { penParent } from './pen.js';
 import { voiceStudio } from './voice.js';
 
@@ -69,11 +70,13 @@ function parentScreen(ctx) {
   const voiceSel = h('select', { onchange: e => { st.settings.voice = e.target.value; store.save(); } },
     h('option', { value: '' }, 'Голос по умолчанию'), voices.map(v => h('option', { value: v.voiceURI, selected: v.voiceURI === st.settings.voice }, v.name)));
   const rate = h('input', { type: 'range', min: 0.6, max: 1.2, step: 0.05, value: st.settings.rate, oninput: e => { st.settings.rate = +e.target.value; store.save(); } });
+  const vol = key => h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: st.settings[key] ?? 1, oninput: e => { st.settings[key] = +e.target.value; store.save(); } });
   const limit = h('select', { onchange: e => { st.settings.dailyLimit = +e.target.value; store.save(); } },
     [0, 15, 20, 30, 45, 60].map(m => h('option', { value: m, selected: m === st.settings.dailyLimit }, m ? `${m} минут в день` : 'Без ограничения')));
   const settings = card('Настройки',
-    h('label', {}, 'Голос озвучки ', voiceSel), h('label', {}, 'Скорость речи ', rate),
-    btn('Проверить голос', () => say('Привет! Я Лумик. Давай учиться вместе!')),
+    h('label', {}, 'Голос озвучки ', voiceSel), h('label', {}, 'Скорость речи (для запасного голоса устройства) ', rate),
+    h('label', {}, 'Громкость голоса ', vol('volVoice')), h('label', {}, 'Громкость звуков ', vol('volSfx')),
+    btn('Проверить голос', () => say(P.voiceTest)), btn('Проверить звук', () => sfx('star')),
     voices.length ? null : h('p', { class: 'warn-text' }, 'На устройстве не найден русский голос. Установите его в настройках устройства (раздел «Синтез речи» или «Преобразование текста в речь»).'),
     h('label', {}, 'Дневной лимит ', limit),
     h('p', { class: 'hint' }, 'После трёх уровней подряд помощник сам предлагает отдохнуть. Когда дневной лимит исчерпан, новые уровни в этот день не открываются.'));

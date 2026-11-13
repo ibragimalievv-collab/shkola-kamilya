@@ -5,7 +5,8 @@
 import { h, today } from './util.js';
 import { ISLANDS } from './curriculum.js';
 import { PEN_TASKS, taskStrokes, slant, strokeLength, SLANT } from './cursive.js';
-import { say, hush, sfx } from './audio.js';
+import { say, hush, sfx, loadPack } from './audio.js';
+import { P } from './phrases.js';
 import { makeBoard, makeCoverage } from './canvas.js';
 import { idb } from './db.js';
 import { starSVG } from './art.js';
@@ -64,8 +65,8 @@ export function penScreen(ctx) {
     const st = isOpen ? penStatus(store, t) : 'locked', w = works(store, t.id), last = w[w.length - 1];
     return h('button', { class: 'pen-card ' + st, 'aria-label': t.title, onclick: () => {
       sfx('tap');
-      if (!isOpen) return say('Эта буква пока закрыта. Сначала научись писать её печатно — на островах письма.');
-      if (st === 'later') return say('Эту букву мы напишем ещё раз завтра.');
+      if (!isOpen) return say(P.penLocked);
+      if (st === 'later') return say(P.penLater);
       penTask(ctx, t);
     } }, h('span', { html: sampleSVG(t, 'small') }),
     h('span', { class: 'pen-mark' }, st === 'locked' ? '🔒' : st === 'redo' ? '🔁' : st === 'wait' ? '⏳' : st === 'later' ? '🌙' : ''),
@@ -79,8 +80,8 @@ export function penScreen(ctx) {
   h('div', { class: 'pen-grid' }, open.map(t => card(t, true)), locked.map(t => card(t, false))));
   app.scrollTop = 0;
   const redo = penCount(store);
-  say(open.length ? (redo ? 'Сегодня напишем ещё раз буквы со стрелочками. А потом можно выбрать новую.' : 'Здесь мы учимся писать ручкой в тетради. Выбери букву.')
-    : 'Здесь мы будем писать ручкой в тетради. Этот раздел откроется, когда ты пройдёшь первый уровень на острове Весёлых Дорожек.');
+  loadPack('pen');
+  say(open.length ? (redo ? P.penRedo : P.penHello) : P.penClosed);
 }
 
 // ---------- одно задание ----------
@@ -112,7 +113,7 @@ function penTask(ctx, task) {
       }
       dot.style.visibility = 'hidden';
     }
-    const text = `${task.say} Зелёная точка показывает, откуда начинать. Посмотри ещё раз — нажми на круглую стрелку. А когда запомнишь — нажми на зелёную кнопку.`;
+    const text = `${task.say} ${P.penDemoTail}`;
     frame('demo', bar(text), svg, h('div', { class: 'opts' },
       h('button', { class: 'ibtn', 'aria-label': 'показать ещё раз', onclick: () => { sfx('tap'); play(); } }, '🔁'),
       h('button', { class: 'ibtn play', 'aria-label': 'дальше', onclick: () => { run++; trace(); } }, '▶')));
@@ -147,7 +148,7 @@ function penTask(ctx, task) {
     }
     cov = makeCoverage({ pts, R: Math.max(16, 26 * k), need: 0.86 });
     b.onClear = () => cov.reset();
-    const text = 'Теперь обведи пальцем по пунктиру. Начинай от зелёной точки.';
+    const text = P.penTrace;
     frame('trace', bar(text), b.el);
     say(text);
     window.__penAuto = () => b.addStroke(pts); // для отладки: обвести самому
@@ -155,7 +156,7 @@ function penTask(ctx, task) {
 
   // Шаг 3. Пишем в тетради.
   function paper() {
-    const text = 'Отлично! А теперь возьми тетрадь и ручку и напиши строчку таких букв. Не спеши. Когда закончишь — нажми на зелёную галочку и позови маму или папу.';
+    const text = P.penPaper;
     frame('paper', bar(text), h('div', { class: 'pen-demo', html: sampleSVG(task) }), h('div', { class: 'pen-note' }, '📓 ✍️'),
       h('button', { class: 'pen-big', onclick: () => { sfx('ok'); photo(); } }, h('span', {}, '✔'), ' Я написал'));
     say(text);
@@ -169,10 +170,10 @@ function penTask(ctx, task) {
       (penOf(store)[task.id] ||= { works: [] }).works.push({ d: today(), t: Date.now(), photo: id, stars: 0, note: '' });
       store.save();
       toList();
-      say(blob ? 'Фото теперь в твоей тетради. Мама или папа посмотрят и поставят звёздочки.' : 'Хорошо. Покажи страницу маме или папе.');
+      say(blob ? P.penSaved : P.penNoPhoto);
     };
     const input = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async e => { const f = e.target.files[0]; if (f) finish(await shrink(f)); } });
-    const text = 'Молодец! Позови маму или папу: пусть сфотографируют твою страницу.';
+    const text = P.penPhoto;
     frame('photo', bar(text), hero('happy', 'big bounce'),
       h('button', { class: 'pen-big', onclick: () => input.click() }, h('span', {}, '📷'), ' Сфотографировать'), input,
       h('button', { class: 'pbtn', onclick: () => finish(null) }, 'Без фото'));

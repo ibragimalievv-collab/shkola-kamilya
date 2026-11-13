@@ -35,7 +35,7 @@ const ANIMALS = [
   ['#a9a9b3', '#e9e9ef', 'b', 'n'], ['#a86b3c', '#f0c9a0', 'b', 'z'], ['#f7a8b8', '#f48ba0', 'c', 'n'], ['#6cc24a', '#6cc24a', '-', 'e'],
   ['#ffffff', '#5c4033', 'h', 'fn'], ['#f4f1e8', '#3d3d3d', 'f', 'u'], ['#ffd84a', '#ff924c', 't', 'b'], ['#9a6b3f', '#e6c9a8', 'c', 'bp'],
   ['#2d3a4f', '#ffffff', '-', 'bz'], ['#f5c95a', '#b5651d', 'h', 'f'], ['#ffffff', '#2b2d42', 'c', 's'], ['#b79ac8', '#cdb4db', 'r', 'n'],
-  ['#c9a27a', '#6b4423', 'r', 'qz'], ['#c2571a', '#fff1d6', 'c', 'zy'], ['#a7a9ad', '#3d3d3d', 'c', 'kz'], ['#c98b4f', '#fff1d6', 'h', 'fz'],
+  ['#f3dcc0', '#6b4423', '-', 'q'], ['#c2571a', '#fff1d6', 'c', 'zy'], ['#a7a9ad', '#3d3d3d', 'c', 'kz'], ['#c98b4f', '#fff1d6', 'h', 'fz'],
   ['#e9e2d0', '#8d99ae', 'h', 'd'], ['#ffe066', '#ff924c', '-', 'v'], ['#f3c98b', '#fff1d6', 'r', 'zw'], ['#c9d6e2', '#eef3f8', '-', 'wz'],
   ['#8e97a6', '#e9ecef', 'c', 'z'], ['#b5733c', '#5c4033', 'c', 'Bn'], ['#4f8fd9', '#cfe8ff', '-', 'xz'], ['#57c785', '#ffd43b', 'h', 'fz'],
   ['#6ea8fe', '#e7f5ff', '-', 'D'], ['#c9a27a', '#fff1d6', 't', 'bp'], ['#8bc34a', '#3f7d20', '-', 'S'],
@@ -56,7 +56,10 @@ export function animalSVG(i) {
   };
   back += earMap[ears];
   if (has('m')) back = `<circle cx="60" cy="62" r="50" fill="${c2}" ${st} stroke-dasharray="14 6"/>` + back;
-  if (has('q')) back = `<path d="M10 62 L4 40 L20 46 L18 22 L36 34 L42 10 L56 28 L68 8 L78 30 L96 16 L96 40 L114 38 L106 60Z" fill="${c2}" ${st}/>` + back;
+  if (has('q')) { // ёжик: колючая спинка со всех сторон, кроме мордочки
+    const pts = Array.from({ length: 27 }, (_, i) => { const a = ((150 + i * 9.23) * Math.PI) / 180, rr = i % 2 ? 58 : 44; return `${(60 + rr * Math.cos(a)).toFixed(1)},${(64 + rr * Math.sin(a)).toFixed(1)}`; }).join(' ');
+    back = `<polygon points="${pts}" fill="${c2}" ${st} stroke-linejoin="round"/>` + back;
+  }
   if (has('c')) back += `<path d="M14 40 q-16 -12 -6 -28 q4 12 14 8 q-10 6 2 18z M106 40 q16 -12 6 -28 q-4 12 -14 8 q10 6 -2 18z" fill="${c}" ${st}/>`;
   if (has('x')) back += `<path d="M60 24 q-2 -14 -14 -16 M60 24 q2 -14 14 -16" fill="none" stroke="#74c0fc" stroke-width="5" stroke-linecap="round"/>`;
   if (has('e')) back += `<circle cx="40" cy="30" r="15" fill="${c}" ${st}/><circle cx="80" cy="30" r="15" fill="${c}" ${st}/>`;
@@ -73,7 +76,8 @@ export function animalSVG(i) {
   const ey = has('e') ? 30 : 58, light = has('p') || has('k');
   front += `<circle cx="42" cy="${ey}" r="6" fill="${light ? '#fff' : dark}"/><circle cx="78" cy="${ey}" r="6" fill="${light ? '#fff' : dark}"/>` + (light ? `<circle cx="42" cy="${ey}" r="3" fill="${dark}"/><circle cx="78" cy="${ey}" r="3" fill="${dark}"/>` : `<circle cx="44" cy="${ey - 2}" r="2" fill="#fff"/><circle cx="80" cy="${ey - 2}" r="2" fill="#fff"/>`);
   front += '<circle cx="26" cy="76" r="7" fill="#ff8fa3" opacity=".6"/><circle cx="94" cy="76" r="7" fill="#ff8fa3" opacity=".6"/>';
-  if (has('v')) front += `<ellipse cx="60" cy="80" rx="20" ry="9" fill="${c2}" ${st}/><path d="M42 80 h36" stroke="${dark}" stroke-width="2"/>`;
+  if (has('q')) front += `<path d="M46 76 q14 -8 28 0 q-4 20 -14 22 q-10 -2 -14 -22z" fill="#fff6e6" ${st}/><circle cx="60" cy="92" r="6" fill="${dark}"/>`;
+  else if (has('v')) front += `<ellipse cx="60" cy="80" rx="20" ry="9" fill="${c2}" ${st}/><path d="M42 80 h36" stroke="${dark}" stroke-width="2"/>`;
   else if (has('D')) front += `<ellipse cx="60" cy="84" rx="24" ry="12" fill="${c2}" ${st}/><path d="M42 84 q18 8 36 0" fill="none" stroke="${dark}" stroke-width="3" stroke-linecap="round"/>`;
   else if (has('S')) front += `<path d="M48 80 q12 10 24 0" fill="none" stroke="${dark}" stroke-width="3" stroke-linecap="round"/>`;
   else if (has('b')) front += `<polygon points="48,70 72,70 60,88" fill="${c2 === '#ffffff' || c2 === '#e6c9a8' ? '#ff924c' : c2}" ${st}/>`;
@@ -82,7 +86,7 @@ export function animalSVG(i) {
   else front += `<ellipse cx="60" cy="74" rx="6" ry="4" fill="${dark}"/><path d="M60 78 q-8 12 -16 4 M60 78 q8 12 16 4" fill="none" stroke="${dark}" stroke-width="3" stroke-linecap="round"/>`;
   if (has('w')) front += `<path d="M30 78 l-22 -5 M30 84 l-22 3 M90 78 l22 -5 M90 84 l22 3" stroke="${dark}" stroke-width="2" stroke-linecap="round"/>`;
   if (has('d')) front += `<path d="M52 104 q8 16 16 0z" fill="${c}" ${st}/>`;
-  const head = has('S') ? `<ellipse cx="60" cy="66" rx="32" ry="30" fill="${c}" ${st}/>` : `<ellipse cx="60" cy="62" rx="44" ry="42" fill="${c}" ${st}/>`;
+  const head = has('q') ? `<ellipse cx="60" cy="70" rx="34" ry="30" fill="${c}" ${st}/>` : has('S') ? `<ellipse cx="60" cy="66" rx="32" ry="30" fill="${c}" ${st}/>` : `<ellipse cx="60" cy="62" rx="44" ry="42" fill="${c}" ${st}/>`;
   return `<svg viewBox="-8 -8 136 128" class="animal">${back}${head}${front}</svg>`;
 }
 

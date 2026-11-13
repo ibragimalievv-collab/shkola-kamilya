@@ -6,6 +6,7 @@
     "test": "node --test tests/",
     "program": "node tools/make-program.mjs",
     "start": "node tools/serve.mjs",
-    "voice:sample": "node tools/voice/sample.mjs"
+    "voice:sample": "node tools/voice/sample.mjs",
+    "voice:design": "node tools/voice/eleven.mjs"
   }
 }

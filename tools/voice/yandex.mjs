@@ -36,6 +36,9 @@ export async function synth(text, voice, key = readKey()) {
       if (!chunks.length) throw new Error(`Сервис не вернул звук для фразы: ${text}`);
       return Buffer.concat(chunks);
     }
+    // Если во второй строке файла указан не тот каталог, сервис сам называет верный — берём его и повторяем.
+    const right = /service account folder ID '([a-z0-9]+)'/.exec(raw);
+    if (res.status === 400 && right && key.folderId !== right[1]) { key.folderId = right[1]; continue; }
     if ((res.status === 429 || res.status >= 500) && attempt < 5) { await new Promise(f => setTimeout(f, 1500 * attempt)); continue; }
     const why = res.status === 401 ? 'Ключ не принят: проверьте первую строку файла «ключ-озвучки.txt».'
       : res.status === 403 ? 'Нет доступа: проверьте идентификатор каталога (вторая строка) и что к аккаунту привязан способ оплаты.'

@@ -5,7 +5,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { synth, readKey } from './yandex.mjs';
 import { synthOpenAI, hasOpenAIKey } from './openai.mjs';
 
-const OUT = new URL('../../проба-голоса/', import.meta.url);
+const ROUND = process.argv[2] === '2' ? 2 : 1; // вторая проба: npm run voice:sample -- 2
+const OUT = new URL(ROUND === 2 ? '../../проба-голоса-2/' : '../../проба-голоса/', import.meta.url);
 
 // Знак + стоит перед ударной гласной: так сервис ставит ударение точно.
 const SCENE = [
@@ -23,6 +24,17 @@ const VARIANTS = [
   ['Д', 'Джейн, радостная', { voice: 'jane', role: 'good', pitch: 300, speed: 1.1 }],
   ['Е', 'Марина, дружелюбная', { voice: 'marina', role: 'friendly', pitch: 300, speed: 1.1 }],
 ];
+// Вторая проба: мальчишеские голоса (мужские, поднятые вверх) и совсем высокие женские.
+if (ROUND === 2) VARIANTS.splice(0, VARIANTS.length,
+  ['Ж', 'Антон, как мальчик', { voice: 'anton', role: 'good', pitch: 500, speed: 1.05 }],
+  ['З', 'Александр, как мальчик', { voice: 'alexander', role: 'good', pitch: 450, speed: 1.05 }],
+  ['И', 'Кирилл, как мальчик', { voice: 'kirill', role: 'good', pitch: 500, speed: 1.05 }],
+  ['К', 'Захар, как мальчик', { voice: 'zahar', role: 'good', pitch: 450, speed: 1.05 }],
+  ['Л', 'Ермил, как мальчик', { voice: 'ermil', role: 'good', pitch: 500, speed: 1.05 }],
+  ['М', 'Филипп, как мальчик', { voice: 'filipp', pitch: 500, speed: 1.05 }],
+  ['Н', 'Маша, очень высокая', { voice: 'masha', role: 'good', pitch: 700, speed: 1.0 }],
+  ['О', 'Даша, очень высокая', { voice: 'dasha', role: 'friendly', pitch: 650, speed: 1.0 }]);
+
 // Для сравнения — три варианта второго сервиса (если есть его ключ). Манера речи задаётся словами.
 const STYLE = 'Говори по-русски без акцента, как весёлый шестилетний ребёнок, герой мультфильма: звонко, радостно, с эмоциями, чётко и не слишком быстро.';
 if (hasOpenAIKey()) VARIANTS.push(
@@ -32,13 +44,14 @@ if (hasOpenAIKey()) VARIANTS.push(
 const speak = (text, voice, key) => (voice.openai ? synthOpenAI(text, voice) : synth(text, voice, key));
 
 // Как лучше произнести звук буквы — пробуем несколько записей одного и того же.
-const SOUNDS = [
+let SOUNDS = [
   ['Звук М: «ммм»', 'ммм'], ['Звук М: по фонеме', '[[m]]'], ['Звук М: «мэ»', 'мэ'],
   ['Звук С: «ссс»', 'ссс'], ['Звук С: по фонеме', '[[s]]'],
   ['Звук К: «к»', 'к'], ['Звук К: по фонеме', '[[k]]'],
   ['Слог', 'ма'], ['Слово', 'м+ама'], ['Число', 'семнадцать'],
 ];
 
+if (ROUND === 2) SOUNDS.length = 0;
 let key = null;
 try { key = readKey(); } catch (e) { if (!hasOpenAIKey()) { console.error(e.message); process.exit(1); } console.log('Ключа Yandex нет — делаю пробу только вторым сервисом.'); }
 if (!key) VARIANTS.splice(0, 6);

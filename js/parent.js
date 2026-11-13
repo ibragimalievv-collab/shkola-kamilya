@@ -107,7 +107,7 @@ function parentScreen(ctx) {
   hush();
   app.className = 'screen parent';
   app.replaceChildren(h('div', { class: 'bar' }, h('button', { class: 'ibtn', 'aria-label': 'назад', onclick: back }, '🗺️'), h('h1', {}, 'Для родителей')),
-    profiles, ...parentExtras({ store, again, placement: ctx.placement }), progress, voiceStudio(), penParent({ store, again, app }), weak, time, settings, islands, data);
+    profiles, ...parentExtras({ store, again, app, placement: ctx.placement }), progress, voiceStudio(), penParent({ store, again, app }), weak, time, settings, islands, data);
   app.scrollTop = 0;
 }
 

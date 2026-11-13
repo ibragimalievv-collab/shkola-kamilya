@@ -5,7 +5,8 @@ import { h, makeRng, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { buildSession, makeTask, tokW } from './tasks.js';
 import { createStore } from './store.js';
-import { say, hush, sfx, setVoiceConfig, setSilent, loadClips } from './audio.js';
+import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames } from './audio.js';
+import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL } from './phrases.js';
 import { heroSVG, HERO_PARTS, PALETTE, animalSVG, islandSVG, starSVG, LINE_COLOR } from './art.js';
 import { renderTask } from './mechanics.js';
 import { openParent } from './parent.js';
@@ -31,6 +32,17 @@ const hero = (mood = 'ok', cls = '') => h('div', { class: 'hero-box ' + cls, htm
 const ibtn = (icon, label, fn, cls = '') => h('button', { class: 'ibtn ' + cls, 'aria-label': label, onclick: () => { sfx('tap'); fn(); } }, icon);
 const stars3 = n => h('span', { class: 'stars', html: [1, 2, 3].map(i => starSVG(i <= n)).join('') });
 const totalStars = () => Object.values(store.profile.levels).reduce((a, b) => a + b, 0);
+// Имя ребёнка произносим, только если оно заранее озвучено (иначе звучал бы другой голос).
+const named = () => voicedNames().includes(store.profile.name);
+// Выбрать фразу так, чтобы она не повторяла предыдущую такого же вида.
+const lastSaid = {};
+function pickNew(list, kind) {
+  let i;
+  do { i = Math.floor(Math.random() * list.length); } while (list.length > 1 && i === lastSaid[kind]);
+  lastSaid[kind] = i;
+  return list[i];
+}
+const praise = () => pickNew(named() ? [...PRAISE, ...PRAISE_NAME(store.profile.name)] : PRAISE, 'praise');
 
 // ---------- приветствие ----------
 function welcome() {
@@ -55,7 +67,7 @@ function paintHero(back) {
   const pal = h('div', { class: 'palette' }, PALETTE.map((c, i) => h('button', { class: 'color' + (i ? '' : ' sel'), style: `background:${c}`, 'aria-label': 'цвет', onclick: e => {
     color = c; sfx('tap'); pal.querySelectorAll('.color').forEach(x => x.classList.toggle('sel', x === e.currentTarget));
   } })));
-  const text = 'Привет! Я Лумик, твой помощник. Раскрась меня! Выбери цвет, а потом нажми на меня: на животик, ушки, лапки или звёздочку. Когда закончишь — нажми на зелёную кнопку.';
+  const text = P.paint;
   screen('paint', h('div', { class: 'bar' }, ibtn('🔊', 'послушать ещё раз', () => say(text))), box, pal,
     ibtn('▶', 'готово', () => { store.profile.heroDone = true; store.save(); (back || map)(); }, 'play'));
   say(text);
@@ -68,14 +80,15 @@ function map() {
     const open = store.islandOpen(isl), done = store.islandDone(isl);
     const got = isl.levels.filter(l => store.stars(l.id)).length;
     return h('button', { class: `island${open ? '' : ' locked'}${done ? ' done' : ''}${next && next.island === isl.n ? ' here' : ''}`, style: `--col:${LINE_COLOR[isl.line]}`,
-      'aria-label': isl.title, onclick: () => { sfx('tap'); open ? island(isl) : say('Этот остров пока закрыт. Сначала пройди острова перед ним.'); } },
+      'aria-label': isl.title, onclick: () => { sfx('tap'); open ? island(isl) : say(P.islandLocked); } },
       h('span', { class: 'inum' }, isl.n + 1),
       h('span', { html: islandSVG(isl.line, !open) }),
       done ? h('span', { class: 'isticker', html: animalSVG(isl.n) }) : !open ? h('span', { class: 'lock' }, '🔒') : null,
       next && next.island === isl.n ? h('span', { class: 'boat', html: heroSVG(store.profile.hero, 'happy') }) : null,
       h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` })));
   });
-  const hi = `Привет, ${store.profile.name}! Нажми на большую зелёную кнопку, чтобы играть дальше. Или выбери остров на карте.`;
+  const hi = named() ? P.hi(store.profile.name) : P.hiNoName;
+  if (next) { loadPack(ISLANDS[next.island].id); const after = ISLANDS[next.island + 1]; if (after) loadPack(after.id); } // подгружаем голос для ближайших островов
   const pens = penCount(store);
   screen('map',
     h('div', { class: 'bar' },
@@ -96,7 +109,7 @@ function island(isl) {
   const nodes = isl.levels.map((L, i) => {
     const open = store.isOpen(L), st = store.stars(L.id);
     return h('button', { class: `node${open ? '' : ' locked'}${st ? ' done' : ''}${L.review ? ' review' : ''}`, 'aria-label': L.title,
-      onclick: () => { sfx('tap'); open ? playLevel(L) : say('Этот уровень откроется, когда ты пройдёшь уровень перед ним.'); } },
+      onclick: () => { sfx('tap'); open ? playLevel(L) : say(P.levelLocked); } },
       h('b', {}, L.review ? (i === isl.levels.length - 1 ? '🎁' : '🔁') : i + 1), open ? stars3(st) : h('span', { class: 'lock' }, '🔒'));
   });
   screen('island-view', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }),
@@ -110,8 +123,10 @@ function island(isl) {
 function playLevel(level) {
   if (store.overLimit()) return rest('limit');
   const isl = ISLANDS[level.island];
+  loadPack(isl.id);
   const r = makeRng(Date.now() % 2147483647);
   const queue = buildSession(level, store.weakList(), r);
+  prepare([level.intro, ...queue.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...queue.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
   let solved = 0, misses = 0, t0 = Date.now(), alive = true;
   const leave = () => { alive = false; store.addTime((Date.now() - t0) / 1000); island(isl); };
 
@@ -142,6 +157,8 @@ function playLevel(level) {
         if (ended) return;
         ended = c.locked = true;
         sfx('ok'); mood('happy'); buddy.classList.add('bounce');
+        // Хвалим голосом не каждый раз, а примерно через раз — и только за ответ без ошибок.
+        if (m === 0 && delay === 1100 && (solved + misses) % 2 === 0) { say(praise()); delay = 2000; }
         if (m === 0 && (t.fromWeak || t.retry)) store.fixWeak(t.src);
         solved++;
         setTimeout(next, delay);
@@ -149,11 +166,11 @@ function playLevel(level) {
       miss() {
         if (ended) return;
         m++; misses++; sfx('miss'); mood('think');
-        if (m === 1) return say(['Почти! Попробуй ещё раз.', 'Не спеши. Подумай и попробуй ещё.', 'Чуть-чуть не так. Давай ещё разок!'][misses % 3]);
+        if (m === 1) return say(pickNew(HINTS, 'hint'));
         // Вторая ошибка: показываем верный ответ и вернём такое же задание чуть позже.
         ended = c.locked = true;
         mech.reveal();
-        say('Ничего страшного. Смотри, как правильно.');
+        say(pickNew(REVEAL, 'reveal'));
         store.addWeak(t.src);
         if (!t.retry) { const again = makeTask(t.src, r); again.retry = true; queue.push(again); }
         setTimeout(next, 3200);
@@ -179,23 +196,21 @@ function playLevel(level) {
 // ---------- награда ----------
 function reward(level, stars, sticker) {
   const isl = ISLANDS[level.island], nxt = store.nextLevel();
-  const words = stars === 3 ? 'Отлично! Три звезды!' : stars === 2 ? 'Молодец! Две звезды!' : 'Уровень пройден! Одна звезда. В следующий раз будет ещё лучше.';
+  const words = stars === 3 ? P.stars3 : stars === 2 ? P.stars2 : P.stars1;
   const go = () => (streak >= 3 ? rest('break', nxt) : nxt ? playLevel(nxt) : map());
   screen('reward', h('div', { class: 'confetti' }, Array.from({ length: 24 }, (_, i) => h('i', { style: `--x:${(i * 37) % 100}%;--c:${PALETTE[i % 9]};--t:${1.6 + (i % 5) * 0.3}s;--dl:${(i % 7) * 0.12}s` }))),
     h('div', { class: 'stars huge', html: [1, 2, 3].map(i => starSVG(i <= stars)).join('') }),
     hero('happy', 'big bounce'),
     sticker ? h('div', { class: 'new-sticker' }, h('span', { html: animalSVG(isl.n) }), h('b', {}, isl.sticker)) : null,
     h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map), nxt ? ibtn('▶', 'дальше', go, 'play') : null));
-  sfx('win');
-  say(words + (sticker ? ` Весь остров пройден! Новая наклейка в твоей коллекции: ${isl.sticker}!` : ''));
+  sfx(sticker ? 'island' : 'star');
+  say(words + (sticker ? ' ' + P.sticker(isl.sticker) : ''));
 }
 
 // ---------- отдых ----------
 function rest(kind, nxt) {
   streak = 0;
-  const text = kind === 'limit'
-    ? 'На сегодня мы позанимались достаточно. Ты молодец! Приходи завтра, я буду тебя ждать.'
-    : 'Мы хорошо позанимались! Давай отдохнём: попрыгай, попей водички, посмотри в окошко. А потом продолжим.';
+  const text = kind === 'limit' ? P.restLimit : P.restBreak;
   screen('rest', hero('sleep', 'big'), h('div', { class: 'zzz' }, '💤'),
     h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map, 'play'), kind === 'break' && nxt ? ibtn('▶', 'ещё один уровень', () => playLevel(nxt), 'small') : null));
   say(text);
@@ -207,10 +222,10 @@ function collection() {
   screen('collection', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }), h('span', { class: 'score' }, `${got} / ${ISLANDS.length}`)),
     h('div', { class: 'stickers' }, ISLANDS.map(isl => {
       const has = store.islandDone(isl);
-      return h('button', { class: 'sticker' + (has ? '' : ' ghost'), 'aria-label': isl.sticker, onclick: () => say(has ? isl.sticker : 'Эта наклейка ждёт тебя на острове номер ' + (isl.n + 1)) }, h('span', { html: animalSVG(isl.n) }));
+      return h('button', { class: 'sticker' + (has ? '' : ' ghost'), 'aria-label': isl.sticker, onclick: () => say(has ? isl.sticker : P.stickerWait(isl.n + 1)) }, h('span', { html: animalSVG(isl.n) }));
     })),
     store.profile.gallery.length ? h('div', { class: 'gallery' }, store.profile.gallery.map(u => h('img', { src: u, alt: 'мой рисунок' }))) : null);
-  say(got ? `У тебя ${got} ${pl(got, ['наклейка', 'наклейки', 'наклеек'])}. А ниже — твои рисунки.` : 'Здесь будут жить твои наклейки. Пройди остров целиком — и получишь первую!');
+  say(got ? P.stickersHave(got) : P.stickersNone);
 }
 
 // ---------- самопроверка: программа сама проходит все уровни (адрес …/?selftest) ----------
@@ -257,6 +272,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:' && !localDev) 
 // Для отладки: показать любые задания по рецептам, не трогая прогресс.
 window.__play = srcs => playLevel({ id: 'demo', island: 0, k: 0, intro: '', tasks: srcs, demo: true });
 loadClips();
+initVoice();
 const params = new URLSearchParams(location.search);
 if (params.has('selftest')) selftest();
 else if (params.has('glyphs')) { // для отладки: все образцы письменных букв на одном листе

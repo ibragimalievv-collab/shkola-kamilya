@@ -7,6 +7,7 @@
 
 import { h, shuffle, range } from './util.js';
 import { sfx } from './audio.js';
+import { P } from './phrases.js';
 import { makeBoard, drawGuide, drawLines, makeCoverage } from './canvas.js';
 import { animalSVG } from './art.js';
 
@@ -197,7 +198,7 @@ function copy(t, c) {
   const b = makeBoard({ brush: 16 });
   drawLines(b);
   const need = Math.min(500, 60 + 70 * t.text.replace(/\s/g, '').length);
-  const go = () => (b.ink() >= need ? c.ok() : c.say('Сначала напиши на холсте, а потом нажми галочку.'));
+  const go = () => (b.ink() >= need ? c.ok() : c.say(P.needWrite));
   c.root.append(row('copy-top', h('div', { class: 'sample' }, t.text), check(c, go)), b.el);
   return { reveal: () => {}, auto: () => { b.addStroke([[20, 20], [20 + need, 20], [20, 60], [20 + need, 60]]); go(); } };
 }
@@ -205,7 +206,7 @@ function copy(t, c) {
 // ---------- 16. Свободный рисунок ----------
 function draw(t, c) {
   const b = makeBoard({ brush: 16 });
-  const go = () => { if (b.ink() < 150) return c.say('Нарисуй картинку, а потом нажми галочку.'); c.saveArt(b.dataUrl()); c.ok(); };
+  const go = () => { if (b.ink() < 150) return c.say(P.needDraw); c.saveArt(b.dataUrl()); c.ok(); };
   c.root.append(row('copy-top', h('div', { class: 'sample' }, '🎨'), check(c, go)), b.el);
   return { reveal: () => {}, auto: () => { b.addStroke([[30, 30], [300, 200], [30, 200]]); go(); } };
 }
@@ -217,7 +218,7 @@ function drawtask(t, c) {
   const ans = () => (t.op === '×' ? t.fixed : t.ans(n));
   const img = () => h('img', { class: 'mydraw', src: url, alt: 'мой рисунок' });
   function drawn() {
-    if (b.ink() < 100) return c.say('Сначала нарисуй, а потом нажми галочку.');
+    if (b.ink() < 100) return c.say(P.needDraw2);
     url = b.dataUrl(); c.saveArt(url);
     if (t.op === '×') return ask();
     phase = 2;

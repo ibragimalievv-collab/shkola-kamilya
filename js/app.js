@@ -9,7 +9,7 @@ import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { buildSession, makeTask, adjust, tokW } from './tasks.js';
 import { createStore } from './store.js';
-import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames } from './audio.js';
+import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames, unlockAudio } from './audio.js';
 import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL } from './phrases.js';
 import { heroSVG, HERO_PARTS, PALETTE, animalSVG, islandSVG, starSVG, LINE_COLOR } from './art.js';
 import { renderTask } from './mechanics.js';
@@ -320,6 +320,7 @@ window.__fun = { reward: id => { const L = LEVELS.find(l => l.id === id); reward
 window.__play = srcs => playLevel({ id: 'demo', island: 0, k: 0, intro: '', tasks: srcs, demo: true });
 loadClips();
 initVoice();
+document.addEventListener('pointerdown', unlockAudio, { once: true, capture: true });
 // Напоминание о занятии: пока приложение открыто или свёрнуто, раз в минуту смотрим на часы.
 let reminded = '';
 setInterval(() => {

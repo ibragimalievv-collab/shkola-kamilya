@@ -245,7 +245,9 @@ async function selftest() {
 }
 
 // ---------- запуск ----------
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+// На своём компьютере (localhost) сохранённую копию не включаем, чтобы при проверке всегда видеть свежие файлы.
+const localDev = location.hostname === 'localhost' && !location.search.includes('offline');
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !localDev) {
   // Когда на устройство приехало обновление, перезапускаем приложение, чтобы оно не работало по старой копии.
   // На заставке это незаметно; посреди занятия не перезапускаем — обновление применится при следующем открытии.
   const hadOld = !!navigator.serviceWorker.controller;

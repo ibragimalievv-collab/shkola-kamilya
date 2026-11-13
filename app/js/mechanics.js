@@ -455,7 +455,20 @@ function array(t, c) {
   return { reveal: set, auto: () => { set(); go(); } };
 }
 
-const MECH = { bubbles: collect, fish: collect, find: collect, pick, listen: pick, story: pick, memory, pairs, baskets, build, missing, claps,
+// ---------- 34. Раздай поровну ----------
+function share(t, c) {
+  const pile = row('pile'), plates = range(1, t.k).map(() => B(c, 'plateb share-plate', '', e => give(e.currentTarget)));
+  range(1, t.k * t.q).forEach(() => pile.append(h('span', {}, t.emoji)));
+  function give(plate) { const it = pile.lastElementChild; if (!it) return; plate.append(it); sfx('pop'); }
+  // Тарелку можно «высыпать» обратно долгим путём не нужно: кнопка-ластик возвращает всё в кучку.
+  const back = B(c, 'tool-btn', '🧽', () => plates.forEach(p => pile.append(...p.children)));
+  const go = () => (pile.children.length === 0 && plates.every(p => p.children.length === t.q) ? c.ok() : c.miss());
+  const solve = () => { plates.forEach(p => pile.append(...p.children)); for (let i = 0; pile.lastElementChild; i++) plates[i % t.k].append(pile.lastElementChild); };
+  c.root.append(row('kp-top', pile, back, check(c, go)), row('plates', ...plates));
+  return { reveal: solve, auto: () => { solve(); go(); } };
+}
+
+const MECH = { share, bubbles: collect, fish: collect, find: collect, pick, listen: pick, story: pick, memory, pairs, baskets, build, missing, claps,
   truefalse, trace, copy, draw, drawtask, count, feed, train, compare, house, numline, keypad, tenframe, shop, problem, dots, stones, paint, chart, groups, array };
 
 // Показать задание на экране.

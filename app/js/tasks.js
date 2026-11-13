@@ -83,7 +83,7 @@ const sentPool = (s, lo, hi, pic) => {
 
 // ---------- помощники для чисел ----------
 const NUMW = ['ноля', 'одного', 'двух', 'трёх', 'четырёх', 'пяти', 'шести', 'семи', 'восьми', 'девяти', 'десяти'];
-const OPW = { '+': 'плюс', '−': 'минус', '×': 'умножить на' };
+const OPW = { '+': 'плюс', '−': 'минус', '×': 'умножить на', '÷': 'разделить на' };
 const f = (o, n) => pl(n, o); // форма слова после числа
 const obj = (r, keys) => OBJECTS[pickR(r, keys || Object.keys(OBJECTS))];
 
@@ -98,8 +98,9 @@ function wrongNums(r, res, n = 3) {
 export function example(kind, r) {
   const R = (lo, hi) => rint(r, lo, hi);
   let a, b, op = '+';
-  const x = /^x(\d)([abc]?)$/.exec(kind);
-  if (x) {
+  const x = /^x(\d)([abc]?)$/.exec(kind), dv = /^d(\d)$/.exec(kind);
+  if (dv) { b = +dv[1]; a = b * R(1, 10); op = '÷'; } // деление: делимое всегда делится нацело
+  else if (x) {
     a = +x[1];
     b = x[2] === 'a' ? R(1, 5) : x[2] === 'b' ? R(6, 10) : R(1, 10);
     if (x[2] === 'c' && r() < 0.5) [a, b] = [b, a];
@@ -138,9 +139,12 @@ export function example(kind, r) {
     case 'x23': return example(pickR(r, ['x2c', 'x3c']), r);
     case 'x45': return example(pickR(r, ['x4c', 'x5c']), r);
     case 'xall': return example(pickR(r, ['x2c', 'x3c', 'x4c', 'x5c']), r);
+    case 'd23': return example(pickR(r, ['d2', 'd3']), r);
+    case 'd45': return example(pickR(r, ['d4', 'd5']), r);
+    case 'dall': return example(pickR(r, ['d2', 'd3', 'd4', 'd5']), r);
     default: throw new Error('Неизвестный вид примера: ' + kind);
   }
-  const res = op === '+' ? a + b : op === '−' ? a - b : a * b;
+  const res = op === '+' ? a + b : op === '−' ? a - b : op === '÷' ? a / b : a * b;
   return { a, b, op, res, text: `${a} ${op} ${b}`, speak: `${a} ${OPW[op]} ${b}` };
 }
 const EX_NAMES = {
@@ -153,8 +157,9 @@ const EX_NAMES = {
   'u+': 'двузначное плюс единицы', 'u-': 'двузначное минус единицы', 'd+': 'двузначное плюс десятки', 'd-': 'двузначное минус десятки',
   'dd+': 'сложение двузначных чисел', 'dd-': 'вычитание двузначных чисел', am100: 'сложение и вычитание до 100',
   x23: 'таблица на 2 и 3', x45: 'таблица на 4 и 5', xall: 'таблица умножения на 2–5',
+  d23: 'деление на 2 и 3', d45: 'деление на 4 и 5', dall: 'деление на 2–5',
 };
-const exName = k => EX_NAMES[k] || `таблица умножения на ${k[1]}`;
+const exName = k => EX_NAMES[k] || (k[0] === 'd' ? `деление на ${k[1]}` : `таблица умножения на ${k[1]}`);
 
 // ---------- реестр генераторов ----------
 const G = {};
@@ -579,6 +584,24 @@ def('array', 'X', 'ряды и столбики', (r, rmax, cmin, cmax) => {
   return { m: 'array', say: `Закрась клетки: в высоту ${rows}, в ширину ${cols}. Нажми на клетку — закрасится прямоугольник. Потом нажми галочку.`, rows, cols, key: 'arr' + rows + cols };
 });
 
+// ===== ДЕЛЕНИЕ =====
+// Раздай поровну: ребёнок сам раскладывает предметы по тарелкам.
+def('share', 'D', 'деление поровну', (r, k, qmax) => {
+  const q = rint(r, 1, qmax), o = obj(r, GRP);
+  return { m: 'share', say: `Раздай поровну. Тут ${k * q} ${f(o, k * q)} и ${k} ${pl(k, ['тарелка', 'тарелки', 'тарелок'])}. Нажимай на тарелки по очереди, чтобы на каждой было одинаково. Потом нажми галочку.`, k, q, emoji: o[3], key: 'share' + k + '_' + q };
+});
+const DBOX = [[['тарелка', 'тарелки', 'тарелок'], 'на', 'на каждой', ['apple', 'pear', 'cookie', 'candy']], [['коробка', 'коробки', 'коробок'], 'в', 'в каждой', ['candy', 'car', 'balloon']], [['корзинка', 'корзинки', 'корзинок'], 'в', 'в каждой', ['mushroom', 'nut', 'apple']]];
+def('problemD', 'D', t => `задачи на деление на ${t}`, (r, t) => {
+  const q = rint(r, 2, 6), a = t * q, [box, prep, each, keys] = pickR(r, DBOX), o = obj(r, keys);
+  const text = `${a} ${f(o, a)} разложили поровну: ${prep} ${t} ${pl(t, box)}. Сколько ${o[2]} ${each}?`;
+  return { m: 'problem', say: `Послушай задачу. ${text} Сначала выбери знак, потом набери ответ.`, text, op: '÷', ops: ['−', '÷'], a: q, expr: `${a} ÷ ${t} = ${q}`, pic: a <= 12 ? { e: o[3], a, b: 0 } : null, key: 'pd' + text };
+});
+def('signMD', 'D', 'умножение и деление', (r, k) => {
+  const e = example(pickR(r, [k, k.replace('d', 'x') + 'c']), r), opts = ['×', '÷'];
+  return { m: 'pick', say: 'Какой знак спрятался: умножить или разделить?', show: { text: `${e.a} ? ${e.b} = ${e.res}` }, opts, a: opts.indexOf(e.op), key: 'smd' + e.text };
+});
+for (const n of ['exKey', 'exPick', 'exBub', 'exFish', 'exTF', 'exPairs', 'exMem', 'exGap']) def('d' + n, 'D', exName, G[n].fn);
+
 // Те же игры с примерами, но в линии «Умножение»
 for (const n of ['exKey', 'exPick', 'exBub', 'exFish', 'exTF', 'exPairs', 'exMem', 'exGap']) def('x' + n, 'X', exName, G[n].fn);
 def('xstones', 'X', G.stones.label, G.stones.fn);
@@ -586,7 +609,7 @@ def('xgap', 'X', (lo, hi, step) => `счёт через ${step}`, G.gap.fn);
 def('xtrain', 'X', (lo, hi, step) => `счёт через ${step}`, G.train.fn);
 
 // ---------- общий вход ----------
-export const LINES = { R: 'Буквы и чтение', W: 'Письмо', M: 'Счёт', X: 'Умножение' };
+export const LINES = { R: 'Буквы и чтение', W: 'Письмо', M: 'Счёт', X: 'Умножение', D: 'Деление' };
 export const lineOf = src => G[src[0]].line;
 export function labelOf(src) {
   const g = G[src[0]];
@@ -623,7 +646,7 @@ export function buildSession(level, weak, r) {
 // ---------- проверка задания на целостность (для автоматических проверок) ----------
 export const MECHANICS = ['bubbles', 'fish', 'find', 'pick', 'listen', 'memory', 'pairs', 'baskets', 'build', 'missing', 'claps',
   'truefalse', 'story', 'trace', 'copy', 'draw', 'drawtask', 'count', 'feed', 'train', 'compare', 'house', 'numline', 'keypad',
-  'tenframe', 'shop', 'problem', 'dots', 'stones', 'paint', 'chart', 'groups', 'array'];
+  'tenframe', 'shop', 'problem', 'dots', 'stones', 'paint', 'chart', 'groups', 'array', 'share'];
 
 export function checkTask(t) {
   const bad = why => { throw new Error(`${JSON.stringify(t.src)}: ${why}`); };
@@ -661,6 +684,7 @@ export function checkTask(t) {
     case 'stones': t.steps.forEach((s, i) => { if (+s.opts[s.a] !== t.seq[i]) bad('камушки'); }); break;
     case 'chart': if (t.target < t.lo || t.target > t.hi) bad('число вне таблицы'); break;
     case 'groups': if (t.ask === 'equal') { if (t.a !== t.counts.every(c => c === t.counts[0])) bad('поровну?'); } else optsOk(); break;
+    case 'share': num(t.k, 2); num(t.q, 1); if (t.k * t.q > 24) bad('слишком много предметов'); break;
     case 'array': num(t.rows, 1); num(t.cols, 1); if (t.rows > 5 || t.cols > 6) bad('не влезет'); break;
   }
   return true;

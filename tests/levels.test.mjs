@@ -6,9 +6,9 @@ import { makeTask, buildSession, checkTask, MECHANICS, lineOf, labelOf } from '.
 import { plainText } from '../app/js/audio.js';
 import { makeRng } from '../app/js/util.js';
 
-test('в программе не меньше 300 уровней по четырём линиям', () => {
+test('в программе не меньше 300 уровней по пяти линиям', () => {
   assert.ok(LEVELS.length >= 300, `уровней: ${LEVELS.length}`);
-  assert.deepEqual([...new Set(ISLANDS.map(i => i.line))].sort(), ['M', 'R', 'W', 'X']);
+  assert.deepEqual([...new Set(ISLANDS.map(i => i.line))].sort(), ['D', 'M', 'R', 'W', 'X']);
 });
 
 test('на каждом острове 8–12 уровней, соседние острова — из разных линий', () => {

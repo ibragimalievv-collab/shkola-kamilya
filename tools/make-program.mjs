@@ -9,7 +9,7 @@ const lvls = n => `${n} ${pl(n, ['уровень', 'уровня', 'уровне
 const count = l => ISLANDS.filter(i => i.line === l).reduce((s, i) => s + i.levels.length, 0);
 let md = `# Школа Камиля — программа обучения
 
-Всего **${ISLANDS.length} островов** и **${lvls(LEVELS.length)}** по четырём линиям:
+Всего **${ISLANDS.length} островов** и **${lvls(LEVELS.length)}** по пяти линиям:
 ${Object.entries(LINES).map(([k, v]) => `- **${v}** — ${ISLANDS.filter(i => i.line === k).length} островов, ${lvls(count(k))}`).join('\n')}
 
 Острова идут в том порядке, в каком открываются на карте: линии чередуются.

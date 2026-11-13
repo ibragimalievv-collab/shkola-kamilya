@@ -3,6 +3,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { synth, readKey } from './yandex.mjs';
+import { synthOpenAI, hasOpenAIKey } from './openai.mjs';
 
 const OUT = new URL('../../проба-голоса/', import.meta.url);
 
@@ -22,6 +23,14 @@ const VARIANTS = [
   ['Д', 'Джейн, радостная', { voice: 'jane', role: 'good', pitch: 300, speed: 1.1 }],
   ['Е', 'Марина, дружелюбная', { voice: 'marina', role: 'friendly', pitch: 300, speed: 1.1 }],
 ];
+// Для сравнения — три варианта второго сервиса (если есть его ключ). Манера речи задаётся словами.
+const STYLE = 'Говори по-русски без акцента, как весёлый шестилетний ребёнок, герой мультфильма: звонко, радостно, с эмоциями, чётко и не слишком быстро.';
+if (hasOpenAIKey()) VARIANTS.push(
+  ['Ж', 'OpenAI, голос coral', { openai: true, voice: 'coral', style: STYLE }],
+  ['З', 'OpenAI, голос nova', { openai: true, voice: 'nova', style: STYLE }],
+  ['И', 'OpenAI, голос shimmer', { openai: true, voice: 'shimmer', style: STYLE }]);
+const speak = (text, voice, key) => (voice.openai ? synthOpenAI(text, voice) : synth(text, voice, key));
+
 // Как лучше произнести звук буквы — пробуем несколько записей одного и того же.
 const SOUNDS = [
   ['Звук М: «ммм»', 'ммм'], ['Звук М: по фонеме', '[[m]]'], ['Звук М: «мэ»', 'мэ'],
@@ -30,16 +39,17 @@ const SOUNDS = [
   ['Слог', 'ма'], ['Слово', 'м+ама'], ['Число', 'семнадцать'],
 ];
 
-let key;
-try { key = readKey(); } catch (e) { console.error(e.message); process.exit(1); }
+let key = null;
+try { key = readKey(); } catch (e) { if (!hasOpenAIKey()) { console.error(e.message); process.exit(1); } console.log('Ключа Yandex нет — делаю пробу только вторым сервисом.'); }
+if (!key) VARIANTS.splice(0, 6);
 mkdirSync(OUT, { recursive: true });
 let n = 0, html = '';
 for (const [id, name, voice] of VARIANTS) {
   html += `<section><h2>Вариант ${id} <small>${name}</small></h2><button onclick="scene('${id}')">▶ Вся сценка</button>`;
   for (let i = 0; i < SCENE.length; i++) {
     const file = `${id}-${i + 1}.mp3`;
-    try { writeFileSync(new URL(file, OUT), await synth(SCENE[i][1], voice, key)); n++; }
-    catch (e) { console.error(`Вариант ${id}, «${SCENE[i][0]}»: ${e.message}`); if (!n) process.exit(1); continue; }
+    try { writeFileSync(new URL(file, OUT), await speak(SCENE[i][1], voice, key)); n++; }
+    catch (e) { console.error(`Вариант ${id}, «${SCENE[i][0]}»: ${e.message}`); continue; }
     html += `<p><b>${SCENE[i][0]}</b><audio id="${id}${i}" controls preload="auto" src="${file}"></audio></p>`;
   }
   html += '</section>';
@@ -60,7 +70,7 @@ section{background:#fff;border-radius:16px;padding:12px 16px;margin:14px 0;box-s
 h2{margin:4px 0 10px}small{font-weight:400;color:#6c757d;font-size:.7em}
 button{font:inherit;padding:12px 20px;border:0;border-radius:12px;background:#38b000;color:#fff;margin-bottom:8px}
 p{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:6px 0}audio{flex:1;min-width:220px}</style>
-<h1>Проба голоса</h1><p>Послушайте вместе с Камилем и выберите вариант: А, Б, В, Г, Д или Е. Внизу — отдельная проба, как звучат звуки букв.</p>
+<h1>Проба голоса</h1><p>Послушайте вместе с Камилем и выберите вариант по букве. Внизу — отдельная проба, как звучат звуки букв.</p>
 ${html}
 <script>function scene(id){let i=0;const next=()=>{const a=document.getElementById(id+i);if(!a)return;a.currentTime=0;a.onended=()=>{i++;next()};a.play()};next()}</script></html>`);
 console.log(`Готово: озвучено фраз — ${n}, это примерно ${(n * 0.1626).toFixed(2)} ₽. Откройте файл «проба-голоса/index.html».`);

@@ -367,7 +367,7 @@ def('feed', 'M', nl, (r, lo, hi) => {
   const n = rint(r, lo, hi);
   const say = n === 0 ? 'Зверёк уже сыт. Дай ему ноль ягодок: ничего не давай и просто нажми галочку.'
     : `Зверёк хочет ${n} ${pl(n, ['ягодку', 'ягодки', 'ягодок'])}. Покорми его и нажми галочку.`;
-  return { m: 'feed', say, n, total: n + rint(r, 2, 4), food: pickR(r, ['🍓', '🍒', '🍇', '🥕']), key: 'feed' + n };
+  return { m: 'feed', say, n, total: n + rint(r, 2, 4), food: pickR(r, ['🍓', '🍒']), key: 'feed' + n };
 });
 function numWrongs(r, n, lo, hi, step = 1) {
   const near = range(Math.max(0, lo - 2 * step), hi + 2 * step, step).filter(x => x !== n);
@@ -471,7 +471,7 @@ def('sign', 'M', exName, (r, k) => {
 });
 
 // --- задачи в одно действие ---
-const HAVE = ['apple', 'candy', 'balloon', 'car', 'nut', 'pear', 'cookie'], EAT = ['apple', 'pear', 'cookie', 'carrot', 'candy'];
+const HAVE = ['apple', 'candy', 'balloon', 'car', 'pear', 'cookie'], EAT = ['apple', 'pear', 'cookie', 'carrot', 'candy'];
 const PLUS = [
   [HAVE, (k, o, a, b) => `У ${k[1]} было ${a} ${f(o, a)}. Потом подарили ещё ${b}. Сколько ${o[2]} стало у ${k[1]}?`],
   [['fish', 'boat'], (k, o, a, b) => `В море плавало ${a} ${f(o, a)}. Приплыло ещё ${b}. Сколько ${o[2]} стало в море?`],
@@ -483,7 +483,7 @@ const MINUS = [
   [HAVE, (k, o, a, b) => `У ${k[1]} было ${a} ${f(o, a)}. ${b} ${f(o, b)} ${k[2]} ${k[3]} другу. Сколько ${o[2]} осталось у ${k[1]}?`],
   [['fish', 'boat'], (k, o, a, b) => `В море плавало ${a} ${f(o, a)}. ${b} уплыло. Сколько ${o[2]} осталось?`],
   [['bird'], (k, o, a, b) => `На ветке сидело ${a} ${f(o, a)}. ${b} улетело. Сколько ${o[2]} осталось на ветке?`],
-  [['mushroom', 'nut'], (k, o, a, b) => `На поляне лежало ${a} ${f(o, a)}. Ёжик унёс ${b}. Сколько ${o[2]} осталось на поляне?`],
+  [['mushroom'], (k, o, a, b) => `На поляне лежало ${a} ${f(o, a)}. Ёжик унёс ${b}. Сколько ${o[2]} осталось на поляне?`],
   [EAT, (k, o, a, b) => `На столе лежало ${a} ${f(o, a)}. ${b} съели за обедом. Сколько ${o[2]} осталось на столе?`],
 ];
 const BOXES = [
@@ -491,7 +491,7 @@ const BOXES = [
   [['ваза', 'вазы', 'ваз'], 'в каждой', ['flower']],
   [['аквариум', 'аквариума', 'аквариумов'], 'в каждом', ['fish']],
   [['коробка', 'коробки', 'коробок'], 'в каждой', ['candy', 'car', 'balloon']],
-  [['корзинка', 'корзинки', 'корзинок'], 'в каждой', ['mushroom', 'nut', 'apple']],
+  [['корзинка', 'корзинки', 'корзинок'], 'в каждой', ['mushroom', 'apple']],
 ];
 const PK = { '10': 'задачи до 10', '20': 'задачи до 20', '100': 'задачи до 100', cmp: 'задачи «на сколько больше»' };
 def('problem', 'M', (kind) => PK[kind.replace(/[+\-±]/g, '')] || 'задачи', (r, kind) => {
@@ -521,7 +521,8 @@ def('problem', 'M', (kind) => PK[kind.replace(/[+\-±]/g, '')] || 'задачи'
   return { m: 'problem', say: `Послушай задачу. ${text} Сначала выбери знак, потом набери ответ.`, text, op, ops: ['+', '−'], a: res, expr: `${a} ${op} ${b} = ${res}`, pic: { e: o[3], a, b }, key: 'pr' + text };
 });
 def('problemX', 'X', t => `задачи на умножение на ${t}`, (r, t) => {
-  const k = rint(r, 2, 6), [box, each, keys] = pickR(r, BOXES), o = obj(r, keys);
+  // На картинке нарисованы тарелки, поэтому и в задаче — только тарелки (не вазы и не коробки).
+  const k = rint(r, 2, 6), [box, each, keys] = BOXES[0], o = obj(r, keys);
   const text = `${k} ${pl(k, box)}, ${each} по ${t} ${f(o, t)}. Сколько всего ${o[2]}?`;
   return { m: 'problem', say: `Послушай задачу. ${text} Сначала выбери знак, потом набери ответ.`, text, op: '×', ops: ['+', '×'], a: t * k, expr: `${t} × ${k} = ${t * k}`, groups: { e: o[3], t, k }, key: 'px' + text };
 });
@@ -555,7 +556,7 @@ def('drawX', 'X', 'умножение по своему рисунку', (r, tma
 
 // ===== УМНОЖЕНИЕ =====
 const times = k => `${k} ${pl(k, ['раз', 'раза', 'раз'])}`;
-const GRP = ['apple', 'cookie', 'pear', 'candy', 'nut', 'flower'];
+const GRP = ['apple', 'cookie', 'pear', 'candy', 'flower'];
 def('grp', 'X', (t) => (t ? `умножение на ${t}` : 'одинаковые группы'), (r, t0, kmax, ask) => {
   const t = t0 || rint(r, 2, 5), k = rint(r, 2, kmax), o = obj(r, GRP), sum = n => Array(n).fill(t).join(' + ');
   const base = { m: 'groups', ask, counts: Array(k).fill(t), emoji: o[3], key: 'grp' + ask + t + '_' + k };
@@ -655,7 +656,7 @@ def('share', 'D', 'деление поровну', (r, k, qmax) => {
   const q = rint(r, 1, qmax), o = obj(r, GRP);
   return { m: 'share', say: `Раздай поровну. Тут ${k * q} ${f(o, k * q)} и ${k} ${pl(k, ['тарелка', 'тарелки', 'тарелок'])}. Нажимай на тарелки по очереди, чтобы на каждой было одинаково. Потом нажми галочку.`, k, q, emoji: o[3], key: 'share' + k + '_' + q };
 });
-const DBOX = [[['тарелка', 'тарелки', 'тарелок'], 'на', 'на каждой', ['apple', 'pear', 'cookie', 'candy']], [['коробка', 'коробки', 'коробок'], 'в', 'в каждой', ['candy', 'car', 'balloon']], [['корзинка', 'корзинки', 'корзинок'], 'в', 'в каждой', ['mushroom', 'nut', 'apple']]];
+const DBOX = [[['тарелка', 'тарелки', 'тарелок'], 'на', 'на каждой', ['apple', 'pear', 'cookie', 'candy']], [['коробка', 'коробки', 'коробок'], 'в', 'в каждой', ['candy', 'car', 'balloon']], [['корзинка', 'корзинки', 'корзинок'], 'в', 'в каждой', ['mushroom', 'apple']]];
 def('problemD', 'D', t => `задачи на деление на ${t}`, (r, t) => {
   const q = rint(r, 2, 6), a = t * q, [box, prep, each, keys] = pickR(r, DBOX), o = obj(r, keys);
   const text = `${a} ${f(o, a)} разложили поровну: ${prep} ${t} ${pl(t, box)}. Сколько ${o[2]} ${each}?`;

@@ -248,9 +248,8 @@ function drawtask(t, c) {
 // ---------- 18. Посчитай предметы ----------
 function count(t, c) {
   const cellsIdx = shuffle(c.rng, range(0, 19)).slice(0, t.n);
-  // Иногда считаем не картинки из набора, а героя, которого ребёнок нарисовал сам.
-  const mine = c.myPic && c.rng() < 0.4;
-  const field = row('field', ...range(0, 19).map(i => h('span', { class: cellsIdx.includes(i) ? 'in' : '' }, cellsIdx.includes(i) ? (mine ? h('img', { class: 'pet tiny', src: c.myPic, alt: '' }) : t.emoji) : '')));
+  // Картинка всегда та, которую называет задание: рисунок ребёнка сюда не подставляем.
+  const field = row('field', ...range(0, 19).map(i => h('span', { class: cellsIdx.includes(i) ? 'in' : '' }, cellsIdx.includes(i) ? t.emoji : '')));
   const btns = t.opts.map((o, i) => B(c, 'opt', face(o), () => choose(i)));
   function choose(i) { if (i === t.a) { btns[i].classList.add('right'); c.ok(); } else { btns[i].classList.add('wrong'); btns[i].disabled = true; c.miss(); } }
   c.root.append(field, row('opts', ...btns));

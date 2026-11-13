@@ -40,13 +40,15 @@ export function playClip(key, done) {
 
 const TOKEN = /\{([^|{}]+)\|([^{}]*)\}/g;
 const hasWords = s => /[\p{L}\d]/u.test(s);
-// Текст без пометок — как его прочитает синтезатор (нужно для проверок).
-export const plainText = text => String(text).replace(TOKEN, '$2');
+// Синтезатор читает кавычки вслух как отдельные слова, поэтому перед озвучкой их убираем.
+const clean = text => String(text).replace(/[«»"„“”']/g, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+// Текст ровно в том виде, в каком его получит синтезатор (нужно для проверок).
+export const plainText = text => clean(String(text).replace(TOKEN, '$2'));
 
 function speak(text, done) {
   const s = synth();
   if (!s) return done();
-  const u = new SpeechSynthesisUtterance(text);
+  const u = new SpeechSynthesisUtterance(clean(text));
   const vs = russianVoices();
   u.voice = vs.find(v => v.voiceURI === cfg.voice) || vs[0] || null;
   u.lang = 'ru-RU';

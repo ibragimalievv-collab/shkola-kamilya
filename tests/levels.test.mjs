@@ -52,6 +52,15 @@ test('каждое задание каждого уровня собираетс
   for (const m of used) assert.ok(MECHANICS.includes(m));
 });
 
+test('в озвучке нет кавычек и других знаков, которые синтезатор читает вслух', () => {
+  const ok = t => assert.ok(/^[а-яёА-ЯЁ0-9 .,!?:;—–…-]+$/.test(plainText(t)), `лишний знак в озвучке: ${plainText(t)}`);
+  for (const L of LEVELS) {
+    ok(L.intro);
+    const r = makeRng(11);
+    for (const src of L.tasks) ok(makeTask(src, r).say);
+  }
+});
+
 test('занятие длится 6–10 заданий и возвращает то, в чём ребёнок ошибался', () => {
   const weak = [['listenL', 'М', 5], ['exKey', 'a10'], ['house', 7, 7]];
   for (const L of LEVELS) {

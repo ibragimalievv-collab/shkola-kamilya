@@ -10,6 +10,7 @@
     "voice:design": "node tools/voice/eleven.mjs",
     "voice:sounds": "node tools/voice/sounds.mjs",
     "voice": "node tools/voice/build.mjs",
-    "pairs": "node tools/pairs.mjs"
+    "pairs": "node tools/pairs.mjs",
+    "publish": "node tools/publish.mjs"
   }
 }

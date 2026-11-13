@@ -5,6 +5,7 @@ import { ISLANDS, LEVELS } from './curriculum.js';
 import { LINES, lineOf, labelOf } from './tasks.js';
 import { idb } from './db.js';
 import { BOOKS } from './books.js';
+import { reviewScreen } from './review.js';
 
 const btn = (text, fn, cls = '') => h('button', { class: 'pbtn ' + cls, onclick: fn }, text);
 const card = (title, ...kids) => h('section', { class: 'pbox' }, h('h2', {}, title), ...kids);
@@ -76,7 +77,10 @@ export function parentExtras(ctx) {
       btn('Распечатать альбом ребёнка', () => printAlbum(p))),
     h('p', { class: 'hint' }, 'В альбоме — его герой, последние рисунки и слова, которые он написал сам.'));
 
-  return [summary, reading, remind, tools];
+  const check = card('Проверка картинок и слов',
+    h('p', {}, 'Все предметы, наклейки, книжки и истории подряд: картинка, название, кнопка «послушать». Отметьте то, что не нравится, и перешлите список.'),
+    btn('Открыть страницу проверки', () => reviewScreen({ app: ctx.app, back: again }), 'on'));
+  return [check, summary, reading, remind, tools];
 }
 
 // Альбом для печати: рисунки и первые написанные слова.

@@ -5,6 +5,7 @@
 import { h, makeRng, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { makeTask, syllables, tokW, example } from './tasks.js';
+import { picOf } from './things.js';
 import { ORDER, WORDS } from './data.js';
 import { STORIES, JOKES, HOME_ITEMS, PET_NAMES, GIFT_COLORS, GIFT_BADGES } from './stories.js';
 import { BOOKS, bareWord } from './books.js';
@@ -16,6 +17,8 @@ import { heroSVG, starSVG } from './art.js';
 
 const totalStars = store => Object.values(store.profile.levels).reduce((a, b) => a + b, 0);
 // Картинка героя, которого нарисовал ребёнок (или ничего, если ещё не рисовал).
+// Название вещи: если это предмет из справочника — звучит его запись.
+const sayName = n => (picOf(n) ? tokW(n) : n);
 export const petImg = (store, cls = 'pet') => (store.profile.pet?.img ? h('img', { class: cls, src: store.profile.pet.img, alt: store.profile.pet.name || 'мой герой' }) : null);
 
 // ---------- свой герой: нарисовать и назвать ----------
@@ -55,9 +58,9 @@ export function homeScreen(x, back) {
   const tray = h('div', { class: 'tray2' });
   const draw = () => {
     room.replaceChildren(h('div', { class: 'room-win' }, '🌤️'), h('div', { class: 'room-hero' }, hero('happy')), petImg(store, 'pet room-pet'),
-      ...HOME_ITEMS.filter((_, i) => home[i]).map(it => { const i = HOME_ITEMS.indexOf(it); return h('button', { class: 'placed' + (picked === i ? ' sel' : ''), style: `left:${home[i][0]}%;top:${home[i][1]}%`, 'aria-label': it[1], onclick: e => { e.stopPropagation(); picked = picked === i ? null : i; sfx('tap'); say(it[1]); draw(); } }, it[0]); }));
+      ...HOME_ITEMS.filter((_, i) => home[i]).map(it => { const i = HOME_ITEMS.indexOf(it); return h('button', { class: 'placed' + (picked === i ? ' sel' : ''), style: `left:${home[i][0]}%;top:${home[i][1]}%`, 'aria-label': it[1], onclick: e => { e.stopPropagation(); picked = picked === i ? null : i; sfx('tap'); say(sayName(it[1])); draw(); } }, it[0]); }));
     tray.replaceChildren(...HOME_ITEMS.map((it, i) => (stars >= it[2]
-      ? h('button', { class: 'titem' + (picked === i ? ' sel' : '') + (home[i] ? ' used' : ''), 'aria-label': it[1], onclick: () => { picked = i; sfx('tap'); say(it[1]); draw(); } }, it[0])
+      ? h('button', { class: 'titem' + (picked === i ? ' sel' : '') + (home[i] ? ' used' : ''), 'aria-label': it[1], onclick: () => { picked = i; sfx('tap'); say(sayName(it[1])); draw(); } }, it[0])
       : h('button', { class: 'titem locked', 'aria-label': 'закрыто', onclick: () => say(P.homeNext(it[2] - stars)) }, h('span', {}, it[0]), h('small', { html: starSVG(true) + it[2] })))));
   };
   room.addEventListener('click', e => {

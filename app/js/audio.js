@@ -62,7 +62,8 @@ function ready(piece) {
   if (!w) return null;
   const buf = loaded.get(w[0]);
   if (!buf) { loadPack(w[0]); return null; }
-  return new Blob([buf.slice(w[1], w[1] + w[2])], { type: 'audio/mpeg' });
+  const part = buf.slice(w[1], w[1] + w[2]), wav = new Uint8Array(part, 0, 4).join() === '82,73,70,70'; // «RIFF» — запись без сжатия
+  return new Blob([part], { type: wav ? 'audio/wav' : 'audio/mpeg' });
 }
 
 // ---------- записи голоса родителей ----------

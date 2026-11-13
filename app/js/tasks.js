@@ -5,6 +5,7 @@
 
 import { ORDER, VOWELS, LETTERS, WORDS, SENTS, FACTS, TEXTS_SHORT, TEXTS_LONG, WRITE_SENTS, DRAWS, OBJECTS, KIDS } from './data.js';
 import { rint, pickR, shuffle, sample, range, uniq, pl } from './util.js';
+import { THINGS, picOf } from './things.js';
 
 // ---------- помощники для букв ----------
 const known = s => ORDER.slice(0, Math.max(s, 1)).split('');
@@ -80,6 +81,17 @@ const sentPool = (s, lo, hi, pic) => {
   const recent = all.filter(x => x.st > s - 5);
   return recent.length >= 3 && s < 33 ? recent : all;
 };
+
+// Похожие картинки: их нельзя предлагать вместе как варианты ответа — ребёнок не сможет выбрать однозначно.
+const ALIKE = ['🐱🐈', '🐕🐶', '🐇🐰', '🐴🐎🦓', '🐔🐓🐥🐦🦃🦜🦉', '🧸🐻🐼', '🐠🐟🐳', '👩👧👵👸🧚', '👨👴👦👶', '🚋🚆🚇🚌', '🌳🎄', '🌹🌸💐', '🚢⛵', '🏠🏙️🏫', '🎈⚽', '🍎🍐', '🦊🐺', '🐭🐹', '🦁🐯'];
+const groupOf = e => ALIKE.findIndex(g => g.includes(e));
+export const alike = (a, b) => a === b || (groupOf(a) >= 0 && groupOf(a) === groupOf(b));
+// Оставить в списке только те слова, чьи картинки не похожи друг на друга (по порядку списка).
+function distinctPics(list) {
+  const out = [];
+  for (const x of list) if (!out.some(y => alike(x.e, y.e))) out.push(x);
+  return out;
+}
 
 // ---------- помощники для чисел ----------
 const NUMW = ['ноля', 'одного', 'двух', 'трёх', 'четырёх', 'пяти', 'шести', 'семи', 'восьми', 'девяти', 'десяти'];
@@ -220,7 +232,7 @@ def('bubS', 'R', slab, (r, syl, s) => ({ m: 'bubbles', say: `Лопни все �
 def('pairsSP', 'R', 'слог и картинка', (r, s) => {
   const ws = shuffle(r, WORDS.filter(x => x.e && x.syl[0].length === 2 && x.syl.length > 1 && x.st <= s + 12 && syllables(s).includes(x.syl[0].toUpperCase())));
   const got = [];
-  for (const w of ws) if (!got.some(g => g.syl[0] === w.syl[0])) got.push(w);
+  for (const w of ws) if (!got.some(g => g.syl[0] === w.syl[0] || alike(g.e, w.e))) got.push(w);
   if (got.length < 3) { const all = syllables(s); return all.length ? call('listenS', r, pickR(r, all), s) : call('listenL', r, pickR(r, known(s)), s); }
   return { m: 'pairs', say: 'Соедини слог и картинку. Нажми на картинку — я скажу слово.', pairs: got.slice(0, 3).map(w => [w.syl[0].toUpperCase(), { t: w.e, say: tokW(w.w) }]) };
 });
@@ -229,7 +241,8 @@ const wl = () => 'чтение слов';
 def('wordpic', 'R', wl, (r, s, f) => {
   const p = pool(s, f, true);
   if (p.length < 3) return call('listenW', r, s, f);
-  const [w, ...rest] = shuffle(r, p);
+  const [w, ...rest] = distinctPics(shuffle(r, p));
+  if (rest.length < 2) return call('listenW', r, s, f);
   return { m: 'pick', say: 'Прочитай слово и найди картинку.', show: { text: disp(w.w, s) }, key: 'wp' + w.w, ...mk(r, w.e, rest.map(x => x.e), 2) };
 });
 def('picword', 'R', wl, (r, s, f) => {
@@ -270,12 +283,16 @@ def('claps', 'R', 'деление на слоги', r => {
 def('pairsWP', 'R', wl, (r, s, f) => {
   const p = pool(s, f, true);
   if (p.length < 3) return call('listenW', r, s, f);
-  return { m: 'pairs', say: 'Прочитай и соедини с картинками.', pairs: sample(r, p, 3).map(w => [disp(w.w, s), { t: w.e, say: tokW(w.w) }]) };
+  const three = distinctPics(shuffle(r, p)).slice(0, 3);
+  if (three.length < 3) return call('listenW', r, s, f);
+  return { m: 'pairs', say: 'Прочитай и соедини с картинками.', pairs: three.map(w => [disp(w.w, s), { t: w.e, say: tokW(w.w) }]) };
 });
 def('memWP', 'R', wl, (r, s, f) => {
   const p = pool(s, f, true);
   if (p.length < 3) return call('listenW', r, s, f);
-  return { m: 'memory', say: 'Открывай карточки и ищи пары: слово и его картинка.', pairs: sample(r, p, 3).map(w => [disp(w.w, s), w.e]) };
+  const three = distinctPics(shuffle(r, p)).slice(0, 3);
+  if (three.length < 3) return call('listenW', r, s, f);
+  return { m: 'memory', say: 'Открывай карточки и ищи пары: слово и его картинка.', pairs: three.map(w => [disp(w.w, s), w.e]) };
 });
 
 const sl = () => 'чтение предложений';
@@ -289,7 +306,7 @@ def('sentpic', 'R', sl, (r, s, lo, hi) => {
   const p = sentPool(s, lo, hi, true);
   if (!p.length) return call('wordpic', r, s);
   const x = pickR(r, p);
-  return { m: 'pick', say: 'Прочитай предложение и найди картинку.', show: { text: x.t, long: true }, key: 'sp' + x.t, ...mk(r, x.e, shuffle(r, SENTS.filter(y => y.e).map(y => y.e)), 2) };
+  return { m: 'pick', say: 'Прочитай предложение и найди картинку.', show: { text: x.t, long: true }, key: 'sp' + x.t, ...mk(r, x.e, distinctPics([x, ...shuffle(r, SENTS.filter(y => y.e))]).slice(1).map(y => y.e), 2) };
 });
 def('truefalse', 'R', 'понимание прочитанного', (r, s) => {
   const all = FACTS.filter(x => x.st <= s), rec = all.filter(x => x.st > s - 8);
@@ -348,9 +365,9 @@ def('dictW', 'W', 'письмо слов по буквам', (r, s, f) => {
   const up = w.w.toUpperCase();
   return { m: 'build', say: `Набери буквами слово: ${tokW(w.w)}.`, pic: w.e, target: up.split(''), key: 'dc' + w.w, extra: sample(r, known(Math.max(s, 8)).filter(x => !up.includes(x)), 4) };
 });
-def('dictT', 'W', 'письмо слов по буквам', (r, word, e) => {
+def('dictT', 'W', 'письмо слов по буквам', (r, word) => {
   const up = word.toUpperCase();
-  return { m: 'build', say: `Набери буквами слово: ${tokW(word)}.`, pic: e, target: up.split(''), key: 'dt' + word, extra: sample(r, ORDER.split('').filter(x => !up.includes(x)), 4) };
+  return { m: 'build', say: `Набери буквами слово: ${tokW(word)}.`, pic: picOf(word.toLowerCase()), target: up.split(''), key: 'dt' + word, extra: sample(r, ORDER.split('').filter(x => !up.includes(x)), 4) };
 });
 def('capital', 'W', 'большая буква и точка', (r, i) => {
   const t = WRITE_SENTS[i % WRITE_SENTS.length];
@@ -364,10 +381,9 @@ def('count', 'M', nl, (r, lo, hi) => {
   return { m: 'count', say: `Сколько тут ${o[2]}? Посчитай и выбери число.`, emoji: o[3], n, key: 'cnt' + n, ...mk(r, n, shuffle(r, range(Math.max(0, n - 3), n + 3))) };
 });
 def('feed', 'M', nl, (r, lo, hi) => {
-  const n = rint(r, lo, hi);
-  const say = n === 0 ? 'Зверёк уже сыт. Дай ему ноль ягодок: ничего не давай и просто нажми галочку.'
-    : `Зверёк хочет ${n} ${pl(n, ['ягодку', 'ягодки', 'ягодок'])}. Покорми его и нажми галочку.`;
-  return { m: 'feed', say, n, total: n + rint(r, 2, 4), food: pickR(r, ['🍓', '🍒']), key: 'feed' + n };
+  // Зверёк ест яблоки — и в задании сказано «яблок»: слово и картинка из одной строки справочника.
+  const n = rint(r, Math.max(1, lo), Math.max(1, hi)), o = OBJECTS.apple;
+  return { m: 'feed', say: `Зверёк хочет ${n} ${f(o, n)}. Покорми его и нажми галочку.`, n, total: n + rint(r, 2, 4), food: o[3], key: 'feed' + n };
 });
 function numWrongs(r, n, lo, hi, step = 1) {
   const near = range(Math.max(0, lo - 2 * step), hi + 2 * step, step).filter(x => x !== n);
@@ -434,7 +450,7 @@ def('sortN', 'M', 'сравнение чисел', (r, p, lo, hi) => {
   const less = sample(r, range(lo, p - 1), 3), more = sample(r, range(p + 1, hi), 3);
   return { m: 'baskets', say: `Если число меньше, чем ${p}, клади его в левую корзину. Если больше, чем ${p}, — в правую.`, bins: [{ t: `< ${p}` }, { t: `> ${p}` }], items: shuffle(r, [...less.map(t => ({ t: String(t), bin: 0 })), ...more.map(t => ({ t: String(t), bin: 1 }))]) };
 });
-const PAINT = [['звёздочку', 'звёздочки', 'звёздочек', '⭐'], ['шарик', 'шарика', 'шариков', '🎈'], ['рыбку', 'рыбки', 'рыбок', '🐠'], ['цветок', 'цветка', 'цветков', '🌼']];
+const PAINT = THINGS.filter(t => t.paint).map(t => [...t.paint, t.pic]); // что можно раскрашивать — из справочника
 def('paint', 'M', nl, (r, lo, hi) => {
   const n = rint(r, lo, hi), o = pickR(r, PAINT);
   return { m: 'paint', say: `Раскрась ровно ${n} ${pl(n, o)}. Нажимай на картинки, а потом на галочку.`, n, total: Math.min(n + rint(r, 2, 4), 12), emoji: o[3], key: 'paint' + n };
@@ -474,14 +490,14 @@ def('sign', 'M', exName, (r, k) => {
 const HAVE = ['apple', 'candy', 'balloon', 'car', 'pear', 'cookie'], EAT = ['apple', 'pear', 'cookie', 'carrot', 'candy'];
 const PLUS = [
   [HAVE, (k, o, a, b) => `У ${k[1]} было ${a} ${f(o, a)}. Потом подарили ещё ${b}. Сколько ${o[2]} стало у ${k[1]}?`],
-  [['fish', 'boat'], (k, o, a, b) => `В море плавало ${a} ${f(o, a)}. Приплыло ещё ${b}. Сколько ${o[2]} стало в море?`],
-  [['shell', 'mushroom'], (k, o, a, b) => `${k[0]} ${k[4]} ${a} ${f(o, a)}. Потом ${k[4]} ещё ${b}. Сколько ${o[2]} у ${k[1]}?`],
+  [['fish'], (k, o, a, b) => `В море плавало ${a} ${f(o, a)}. Приплыло ещё ${b}. Сколько ${o[2]} стало в море?`],
+  [['mushroom'], (k, o, a, b) => `${k[0]} ${k[4]} ${a} ${f(o, a)}. Потом ${k[4]} ещё ${b}. Сколько ${o[2]} у ${k[1]}?`],
   [['flower', 'mushroom'], (k, o, a, b) => `На поляне росло ${a} ${f(o, a)}. Выросло ещё ${b}. Сколько ${o[2]} стало на поляне?`],
   [['bird'], (k, o, a, b) => `На ветке сидело ${a} ${f(o, a)}. Прилетело ещё ${b}. Сколько ${o[2]} стало на ветке?`],
 ];
 const MINUS = [
   [HAVE, (k, o, a, b) => `У ${k[1]} было ${a} ${f(o, a)}. ${b} ${f(o, b)} ${k[2]} ${k[3]} другу. Сколько ${o[2]} осталось у ${k[1]}?`],
-  [['fish', 'boat'], (k, o, a, b) => `В море плавало ${a} ${f(o, a)}. ${b} уплыло. Сколько ${o[2]} осталось?`],
+  [['fish'], (k, o, a, b) => `В море плавало ${a} ${f(o, a)}. ${b} уплыло. Сколько ${o[2]} осталось?`],
   [['bird'], (k, o, a, b) => `На ветке сидело ${a} ${f(o, a)}. ${b} улетело. Сколько ${o[2]} осталось на ветке?`],
   [['mushroom'], (k, o, a, b) => `На поляне лежало ${a} ${f(o, a)}. Ёжик унёс ${b}. Сколько ${o[2]} осталось на поляне?`],
   [EAT, (k, o, a, b) => `На столе лежало ${a} ${f(o, a)}. ${b} съели за обедом. Сколько ${o[2]} осталось на столе?`],
@@ -663,7 +679,9 @@ def('problemD', 'D', t => `задачи на деление на ${t}`, (r, t) =
   return { m: 'problem', say: `Послушай задачу. ${text} Сначала выбери знак, потом набери ответ.`, text, op: '÷', ops: ['−', '÷'], a: q, expr: `${a} ÷ ${t} = ${q}`, pic: a <= 12 ? { e: o[3], a, b: 0 } : null, key: 'pd' + text };
 });
 def('signMD', 'D', 'умножение и деление', (r, k) => {
-  const e = example(pickR(r, [k, k.replace('d', 'x') + 'c']), r), opts = ['×', '÷'];
+  let e;
+  do { e = example(pickR(r, [k, k.replace('d', 'x') + 'c']), r); } while (e.a === 1 || e.b === 1 || e.a * e.b === e.a / e.b); // с единицей подошли бы оба знака
+  const opts = ['×', '÷'];
   return { m: 'pick', say: 'Какой знак спрятался: умножить или разделить?', show: { text: `${e.a} ? ${e.b} = ${e.res}` }, opts, a: opts.indexOf(e.op), key: 'smd' + e.text };
 });
 for (const n of ['exKey', 'exPick', 'exBub', 'exFish', 'exTF', 'exPairs', 'exMem', 'exGap']) def('d' + n, 'D', exName, G[n].fn);

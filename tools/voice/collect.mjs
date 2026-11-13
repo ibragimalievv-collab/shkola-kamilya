@@ -20,7 +20,7 @@ export function collect(seeds = 400) {
   for (const w of WORDS) add('common', `{ш:${w.w}|${w.w}}`);
   for (const t of PEN_TASKS) add('pen', t.say);
   // Книжки: каждая страница целиком и каждое слово отдельно (его можно нажать).
-  for (const [, title, pages] of BOOKS) { add('books', title); for (const [, text] of pages) { add('books', text); for (const w of text.split(' ')) { const b = bareWord(w); if (b) add('books', `{ш:${b}|${b}}`); } } }
+  for (const [, , pages] of BOOKS) { for (const [, text] of pages) { add('books', text); for (const w of text.split(' ')) { const b = bareWord(w); if (b) add('books', `{ш:${b}|${b}}`); } } }
   // Истории островов.
   for (const isl of ISLANDS) for (const [, line] of STORIES[isl.id]?.[1] || []) add(isl.id, line);
   for (const isl of ISLANDS) for (const L of isl.levels) {

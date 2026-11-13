@@ -2,12 +2,12 @@
 // после этого всё берётся из сохранённой копии. Приложение ни к каким чужим адресам не обращается.
 
 // При любом изменении файлов приложения увеличьте номер версии — устройства скачают обновление.
-const VERSION = 'shkola-kamilya-12';
+const VERSION = 'shkola-kamilya-14';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'js/app.js', 'js/art.js', 'js/audio.js', 'js/canvas.js', 'js/curriculum.js', 'js/cursive.js', 'js/data.js', 'js/db.js',
-  'js/books.js', 'js/fun.js', 'js/mechanics.js', 'js/parent.js', 'js/parent2.js', 'js/pen.js', 'js/phrases.js', 'js/speech.js', 'js/store.js', 'js/stories.js', 'js/tasks.js', 'js/util.js', 'js/voice.js',
+  'js/books.js', 'js/fun.js', 'js/mechanics.js', 'js/parent.js', 'js/parent2.js', 'js/pen.js', 'js/phrases.js', 'js/review.js', 'js/speech.js', 'js/store.js', 'js/stories.js', 'js/tasks.js', 'js/things.js', 'js/util.js', 'js/voice.js',
 ];
 
 self.addEventListener('install', e => {

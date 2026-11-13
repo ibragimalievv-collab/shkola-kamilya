@@ -8,6 +8,7 @@ import { collect } from './collect.mjs';
 import { synth, readKey } from './yandex.mjs';
 import { VOICE, NAMES, STRESS, LETTER_TRIES, LETTER_ALSO, PRICE_PER_REQUEST } from './config.mjs';
 import { pieces, hash } from '../../app/js/speech.js';
+import { yShare, longY, SOUND_RANGE } from './acoustic.mjs';
 import { allPhrases } from '../../app/js/phrases.js';
 import { ISLANDS } from '../../app/js/curriculum.js';
 
@@ -18,7 +19,7 @@ const voiceTag = hash(JSON.stringify(VOICE));
 
 // Текст, который уйдёт в сервис: звук буквы, слово с ударением и так далее.
 function spoken(p) {
-  if (p.key?.startsWith('б:')) return 'звук буквы, проверенный на слух машиной: ' + p.key.slice(2) + ' ' + LETTER_TRIES[p.key.slice(2)].join('|');
+  if (p.key?.startsWith('б:')) return 'звук буквы, проверенный на слух машиной: ' + p.key.slice(2) + ' ' + LETTER_TRIES[p.key.slice(2)].join('|') + (SOUND_RANGE[p.key.slice(2)] ? ' +резонансы, ровная громкость, 2' : '');
   let t = p.text;
   for (const [word, marked] of Object.entries(STRESS)) t = t.replace(new RegExp(`(?<![а-яёА-ЯЁ+])${word}(?![а-яёА-ЯЁ])`, 'g'), marked);
   return t;
@@ -37,21 +38,30 @@ if (DRY) process.exit(0);
 async function letterClip(L, key) {
   const want = [L.toLowerCase(), ...(LETTER_ALSO[L] || [])];
   let spare = null;
-  for (const text of LETTER_TRIES[L]) for (let take = 0; take < 3; take++) {
+  for (const text of LETTER_TRIES[L]) for (let take = 0; take < 6; take++) {
     const res = await fetch('https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis', { method: 'POST', headers: { Authorization: `Api-Key ${key.apiKey}`, 'x-folder-id': key.folderId, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(VOICE.model ? { model: VOICE.model } : {}), text, hints: [{ voice: VOICE.voice }], outputAudioSpec: { rawAudio: { audioEncoding: 'LINEAR16_PCM', sampleRateHertz: '16000' } } }) });
     const raw = await res.text(), right = /service account folder ID '([a-z0-9]+)'/.exec(raw);
     if (right && key.folderId !== right[1]) { key.folderId = right[1]; take--; continue; }
     if (!res.ok) { await new Promise(f => setTimeout(f, 1500)); continue; }
-    const pcm = Buffer.concat(raw.split('\n').filter(Boolean).map(l => { const o = JSON.parse(l); return Buffer.from((o.result ?? o).audioChunk?.data || '', 'base64'); }));
+    let pcm = Buffer.concat(raw.split('\n').filter(Boolean).map(l => { const o = JSON.parse(l); return Buffer.from((o.result ?? o).audioChunk?.data || '', 'base64'); }));
+    if (L === 'Ы') { // «ы» вырезаем из слова и растягиваем; распознавание её не различает, решает измерение
+      const y = longY(pcm), share = y ? yShare(y) : 0;
+      console.log(`  буква Ы из слова «${text}»: ${y ? 'похожа на «ы» на ' + Math.round(share * 100) + '%' : '«ы» в слове слишком короткая'}`);
+      if (!y || share < SOUND_RANGE.Ы[0]) continue;
+      pcm = y;
+    }
     const st = await fetch(`https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?lang=ru-RU&format=lpcm&sampleRateHertz=16000&folderId=${key.folderId}`, { method: 'POST', headers: { Authorization: `Api-Key ${key.apiKey}` }, body: pcm });
     const heard = st.ok ? ((await st.json()).result || '').toLowerCase().replace(/[^а-яё]/g, '') : '';
-    const sec = pcm.length / 32000, ok = sec <= 1.7 && heard && (want.includes(heard) || [...heard].every(ch => ch === want[0]));
+    const sec = pcm.length / 32000, range = SOUND_RANGE[L], share = range ? yShare(pcm) : null;
+    const soundOk = !range || (share >= range[0] && share <= range[1]);
+    const ok = sec <= 1.7 && soundOk && (L === 'Ы' || (heard && (want.includes(heard) || [...heard].every(ch => ch === want[0]))));
+    if (L === 'И') console.log(`  буква И: похожа на «ы» на ${Math.round(share * 100)}% (должно быть не больше 15%)`);
     // Запись без сжатия заворачиваем в обычный звуковой файл (WAV).
     const head = Buffer.alloc(44); head.write('RIFF', 0); head.writeUInt32LE(36 + pcm.length, 4); head.write('WAVEfmt ', 8); head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22); head.writeUInt32LE(16000, 24); head.writeUInt32LE(32000, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(pcm.length, 40);
     const wav = Buffer.concat([head, pcm]);
     if (ok) { console.log(`  буква ${L}: «${text}» — распознавание услышало «${heard}», ${sec.toFixed(2)} с — берём`); return wav; }
     console.log(`  буква ${L}: «${text}» — услышано «${heard}», ${sec.toFixed(2)} с — не подходит`);
-    if (sec <= 1.7 && !spare) spare = wav;
+    if (sec <= 1.7 && soundOk && !spare) spare = wav;
   }
   if (spare) { console.log(`  буква ${L}: НЕТ ПРОВЕРЕННОЙ ЗАПИСИ — взята непроверенная, послушайте её сами`); return spare; }
   throw new Error('не удалось озвучить букву ' + L);

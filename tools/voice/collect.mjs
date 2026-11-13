@@ -6,6 +6,8 @@ import { pieces } from '../../app/js/speech.js';
 import { makeRng } from '../../app/js/util.js';
 import { ORDER, WORDS } from '../../app/js/data.js';
 import { PEN_TASKS } from '../../app/js/cursive.js';
+import { STORIES } from '../../app/js/stories.js';
+import { BOOKS, bareWord } from '../../app/js/books.js';
 
 export function collect(seeds = 400) {
   const packs = new Map(); // остров → (отпечаток → кусочек)
@@ -17,6 +19,10 @@ export function collect(seeds = 400) {
   for (const s of syllables(33)) add('common', `{с:${s}|${s.toLowerCase()}}`);
   for (const w of WORDS) add('common', `{ш:${w.w}|${w.w}}`);
   for (const t of PEN_TASKS) add('pen', t.say);
+  // Книжки: каждая страница целиком и каждое слово отдельно (его можно нажать).
+  for (const [, title, pages] of BOOKS) { add('books', title); for (const [, text] of pages) { add('books', text); for (const w of text.split(' ')) { const b = bareWord(w); if (b) add('books', `{ш:${b}|${b}}`); } } }
+  // Истории островов.
+  for (const isl of ISLANDS) for (const [, line] of STORIES[isl.id]?.[1] || []) add(isl.id, line);
   for (const isl of ISLANDS) for (const L of isl.levels) {
     add(isl.id, L.intro);
     for (const [, w] of L.show?.pics || []) add('common', `{ш:${w}|${w}}`);
@@ -24,7 +30,7 @@ export function collect(seeds = 400) {
       const r = makeRng(seed * 7919 + L.k * 31 + isl.n);
       for (const src of L.tasks) {
         const t = makeTask(src, r);
-        for (const text of [t.say, t.ask, t.text && t.m === 'problem' ? t.text : null]) if (text) add(isl.id, text);
+        for (const text of [t.say, t.ask, t.sample, t.text && t.m === 'problem' ? t.text : null]) if (text) add(isl.id, text);
         if (typeof t.q === "function") for (let n = 1; n <= (t.max || 1); n++) add(isl.id, t.q(n));
         if (typeof t.done === "function") for (let n = 1; n <= t.max; n++) add(isl.id, t.done(n));
         for (const pair of t.pairs || []) for (const side of pair) if (side?.say) add(isl.id, side.say);

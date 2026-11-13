@@ -1,12 +1,12 @@
 // БОЛЬШОЕ ХРАНИЛИЩЕ НА УСТРОЙСТВЕ (IndexedDB): фотографии тетради и записи голоса родителей.
 // Ничего никуда не отправляется: всё лежит только на этом устройстве.
 
-const NAME = 'shkola-kamilya', STORES = ['photos', 'clips'];
+const NAME = 'shkola-kamilya', STORES = ['photos', 'clips', 'reads']; // фото тетради, записи родителей, чтение ребёнка вслух
 let opening = null;
 
 function open() {
   opening ||= new Promise((ok, fail) => {
-    const req = indexedDB.open(NAME, 1);
+    const req = indexedDB.open(NAME, 2);
     req.onupgradeneeded = () => STORES.forEach(s => req.result.objectStoreNames.contains(s) || req.result.createObjectStore(s));
     req.onsuccess = () => ok(req.result);
     req.onerror = () => fail(req.error);

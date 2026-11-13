@@ -369,3 +369,61 @@ svg { display: block; width: 100%; height: 100%; }
 .ccell { min-width: 31px; min-height: 31px; }
 .dots { width: max(300px, min(96vw, 70dvh)); height: max(300px, min(96vw, 70dvh)); max-width: 96vw; }
 .task { flex-shrink: 0; min-height: min-content; }
+
+/* часы и чтение вслух */
+.clockface { width: 100%; height: 100%; }
+.bigclock { width: min(46vmin, 300px); height: min(46vmin, 300px); flex: none; }
+.clockopt { padding: 1vmin; } .clockopt span { display: block; width: clamp(96px, 26vmin, 200px); height: clamp(96px, 26vmin, 200px); }
+.mic { background: #e7f0ff; box-shadow: 0 1vmin 0 #74a7ff; }
+.mic.recording { background: #ff6b6b; box-shadow: 0 1vmin 0 #c92a2a; animation: pulse 1s infinite; }
+
+/* --- свой герой, история, домик, книжки, сюрпризы --- */
+#app.map .bar { flex-wrap: wrap; justify-content: flex-end; }
+.pet { max-width: 26vmin; max-height: 26vmin; object-fit: contain; flex: none; }
+.pet.big { max-width: min(46vmin, 300px); max-height: min(40vmin, 260px); }
+.pet.tiny { max-width: 1.6em; max-height: 1.6em; vertical-align: middle; }
+.pet.onmap { position: absolute; right: 4%; bottom: 8%; max-width: 30%; max-height: 40%; }
+.score.chain { background: #fff3; border-radius: 4vmin; padding: 0 1.4vmin; }
+.score.dark { color: var(--ink); text-shadow: none; }
+.story-card { display: flex; align-items: center; gap: 2vmin; background: #fff; border-radius: 3vmin; padding: 1.5vmin 2.5vmin; box-shadow: 0 0 0 .5vmin #ffd43b, 0 1vmin 2vmin #0002; max-width: 92%; animation: popin .5s 1.2s backwards; z-index: 1; }
+.story-card .scene { font-size: clamp(34px, 9vmin, 64px); white-space: nowrap; display: flex; align-items: center; }
+.story-card .line { font-size: 1.15em; text-align: left; line-height: 1.3; }
+.strip { display: flex; flex-wrap: wrap; gap: 1.2vmin; justify-content: center; max-width: 900px; flex-shrink: 0; }
+.beat { font-size: clamp(22px, 5vmin, 36px); background: #fff; border-radius: 2vmin; padding: .6vmin 1.2vmin; box-shadow: 0 .4vmin 0 #c9d6e8; min-width: 44px; min-height: 44px; display: grid; place-items: center; white-space: nowrap; }
+.beat.todo { opacity: .35; box-shadow: none; }
+.gift { position: relative; font-size: clamp(40px, 10vmin, 70px); background: none; animation: bounce 1s 3; z-index: 1; }
+.gift-in { position: absolute; right: -40%; top: -20%; font-size: .7em; animation: popin .5s 1.6s backwards; } .gift-in .color { display: block; width: 1em; height: 1em; }
+.badges { display: flex; flex-wrap: wrap; gap: 1.5vmin; justify-content: center; font-size: clamp(30px, 7vmin, 50px); flex-shrink: 0; }
+#app.home { background: #fff6e0; }
+.room { position: relative; width: 100%; flex: 1; min-height: 46dvh; border-radius: 4vmin; overflow: hidden; background: linear-gradient(#ffe8cc 0 62%, #d9a066 62% 100%); box-shadow: 0 0 0 .8vmin #b08968 inset; touch-action: manipulation; }
+.room-win { position: absolute; left: 8%; top: 8%; font-size: 12vmin; background: #bde0fe; border-radius: 2vmin; padding: 0 2vmin; box-shadow: 0 0 0 1vmin #fff; }
+.room-hero { position: absolute; left: 50%; bottom: 4%; width: 26vmin; height: 26vmin; translate: -50% 0; pointer-events: none; } .room-hero .hero-box { width: 100%; height: 100%; }
+.room-pet { position: absolute; left: 68%; bottom: 6%; pointer-events: none; }
+.placed { position: absolute; translate: -50% -50%; font-size: clamp(40px, 11vmin, 84px); background: none; line-height: 1; }
+.placed.sel, .titem.sel { outline: .8vmin dashed #ff6b6b; border-radius: 2vmin; }
+.tray2 { display: flex; gap: 1.4vmin; overflow-x: auto; width: 100%; padding: 1vmin; flex: none; }
+.titem { flex: none; min-width: clamp(60px, 13vmin, 96px); height: clamp(60px, 13vmin, 96px); border-radius: 2.4vmin; background: #fff; box-shadow: 0 .6vmin 0 #c9d6e8; font-size: clamp(30px, 7vmin, 50px); display: grid; place-items: center; }
+.titem.used { opacity: .45; } .titem.locked span { filter: grayscale(1) opacity(.4); font-size: .8em; }
+.titem small { font-size: .32em; display: flex; align-items: center; gap: 2px; } .titem small svg { width: 1.2em; height: 1.2em; }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 26vmin, 190px), 1fr)); gap: 2vmin; width: 100%; padding: 1vmin; flex-shrink: 0; }
+.book { position: relative; aspect-ratio: 3/4; border-radius: 1vmin 3vmin 3vmin 1vmin; background: #fff; box-shadow: -1vmin 0 0 #ff8fa3, 0 .8vmin 0 #c9d6e8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1vmin; padding: 1vmin; }
+.book:nth-child(3n) { box-shadow: -1vmin 0 0 #74c0fc, 0 .8vmin 0 #c9d6e8; } .book:nth-child(3n+1) { box-shadow: -1vmin 0 0 #8ce99a, 0 .8vmin 0 #c9d6e8; }
+.book .cover { font-size: clamp(34px, 9vmin, 64px); } .book b { font-size: .95em; text-align: center; }
+.book.locked { opacity: .5; } .book.done { background: #f0ffe8; }
+.book-title { text-align: center; font-size: 1.2em; }
+.page { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; gap: 2vmin; width: 100%; background: #fff; border-radius: 4vmin; box-shadow: 0 0 0 .6vmin #dbe7ff; padding: 2vmin; min-height: 0; }
+.page-text { display: flex; flex-wrap: wrap; justify-content: center; gap: 1vmin 2vmin; font-size: clamp(30px, 8.5vmin, 68px); line-height: 1.2; }
+.word { background: none; font-size: inherit; border-bottom: .5vmin dotted #adb5bd; padding: 0 .1em; min-height: 44px; } .word:active { background: #fff3bf; }
+.showdad { justify-content: center; font-family: system-ui, sans-serif; }
+.show-card { background: #fff; border-radius: 20px; padding: 20px; max-width: 640px; width: 100%; box-shadow: 0 2px 10px #0002; }
+.show-card h2 { margin: 0 0 8px; } .show-items { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.show-item { font: 700 clamp(26px, 6vmin, 44px) var(--font); background: #f1f3f5; border-radius: 12px; padding: 10px 16px; text-align: center; }
+.pbtn.big { font-size: 20px; padding: 14px 18px; }
+
+/* напоминание и альбом */
+.toast { position: fixed; left: 50%; top: max(2vmin, env(safe-area-inset-top)); translate: -50% 0; z-index: 20; background: #fff3bf; border-radius: 4vmin; padding: 2vmin 4vmin; font-size: 1.2em; box-shadow: 0 1vmin 3vmin #0004; animation: popin .4s; }
+.album h1 { font: 700 28px system-ui, sans-serif; text-align: center; }
+.album-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; padding: 10mm; }
+.album figure { margin: 0; break-inside: avoid; text-align: center; font: 16px system-ui, sans-serif; }
+.album img { max-width: 100%; max-height: 80mm; border: 1px solid #ccc; border-radius: 3mm; }
+.opts.col .opt { max-width: 94vw; } .opt .pic.small { white-space: normal; word-break: break-all; line-height: 1.25; }

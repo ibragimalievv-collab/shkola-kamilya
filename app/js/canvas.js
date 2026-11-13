@@ -65,6 +65,17 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
     clear() { strokes.length = 0; redraw(); api.onClear?.(); },
     // Добавить линию программно (нужно для показа ответа и самопроверки).
     addStroke(pts, col = '#2a9d8f') { const s = { color: col, size, pts }; strokes.push(s); redraw(); pts.forEach(p => onStroke?.(p)); },
+    // Рисунок без фона, обрезанный по краям — чтобы нарисованный герой мог жить на карте и в задачах.
+    cutout(max = 200) {
+      const xs = strokes.flatMap(s => s.pts.map(p => p[0])), ys = strokes.flatMap(s => s.pts.map(p => p[1]));
+      if (!xs.length) return null;
+      const pad = 18, x0 = Math.max(0, Math.min(...xs) - pad), y0 = Math.max(0, Math.min(...ys) - pad);
+      const w = Math.min(W, Math.max(...xs) + pad) - x0, hh = Math.min(H, Math.max(...ys) + pad) - y0, k = Math.min(1, max / Math.max(w, hh));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(hh * k));
+      c.getContext('2d').drawImage(ink, x0, y0, w, hh, 0, 0, c.width, c.height);
+      return c.toDataURL('image/png');
+    },
     // Рисунок как картинка (уменьшенная, чтобы не занимать память).
     dataUrl() {
       const c = document.createElement('canvas'), k = 360 / W;

@@ -35,10 +35,10 @@ function syllableLevel(s, letters) {
 }
 const wordsLevel = s => lv('Читаем слова', 'Читать слова из знакомых букв и понимать их',
   'Из слогов получается слово. Прочитай его по слогам, а потом скажи целиком. Что оно значит?',
-  [['wordpic', s], ['buildW', s], ['picword', s], ['missing', s], ['listenW', s], ['pairsWP', s], ['claps']]);
+  [['wordpic', s], ['buildW', s], ['picword', s], ['readW', s], ['missing', s], ['listenW', s], ['pairsWP', s], ['claps']]);
 const sentLevelEarly = s => lv('Слова и предложения', 'Читать короткие предложения',
   'Несколько слов встают рядом — получается предложение. Первое слово пишут с большой буквы, а в конце ставят точку.',
-  [['wordpic', s], ['sentence', s, 2, 3], ['sentpic', s, 2, 4], ['buildW', s], ['truefalse', s], ['memWP', s], ['sentence', s, 2, 4]]);
+  [['wordpic', s], ['sentence', s, 2, 3], ['sentpic', s, 2, 4], ['readS', s, 2, 3], ['buildW', s], ['truefalse', s], ['memWP', s], ['sentence', s, 2, 4]]);
 
 function letterIsland(id, title, letters, s0, can, mid) {
   const L = letters.split(''), s = s0 + L.length;
@@ -50,14 +50,14 @@ function letterIsland(id, title, letters, s0, can, mid) {
 }
 
 const wordLv = (title, goal, intro, f, k) => lv(title, goal, intro,
-  [['wordpic', 33, f], ['buildW', 33, f], ['picword', 33, f], ['claps'], ['missing', 33, f], ['listenW', 33, f], [k % 2 ? 'memWP' : 'pairsWP', 33, f]]);
+  [['wordpic', 33, f], ['buildW', 33, f], ['picword', 33, f], ['readW', 33, f], ['claps'], ['missing', 33, f], ['listenW', 33, f], [k % 2 ? 'memWP' : 'pairsWP', 33, f]]);
 const sentLv = (title, goal, intro, lo, hi, k) => lv(title, goal, intro, k % 2
-  ? [['sentpic', 33, lo, hi], ['sentence', 33, lo, hi], ['truefalse', 33], ['sentpic', 33, lo, hi], ['sentence', 33, lo, hi], ['wordpic', 33, 'long'], ['truefalse', 33]]
-  : [['sentence', 33, lo, hi], ['sentpic', 33, lo, hi], ['sentence', 33, lo, hi], ['truefalse', 33], ['sentpic', 33, lo, hi], ['truefalse', 33], ['buildW', 33, 'mid']]);
+  ? [['sentpic', 33, lo, hi], ['sentence', 33, lo, hi], ['readS', 33, lo, hi], ['truefalse', 33], ['sentpic', 33, lo, hi], ['sentence', 33, lo, hi], ['wordpic', 33, 'long'], ['truefalse', 33]]
+  : [['sentence', 33, lo, hi], ['sentpic', 33, lo, hi], ['readS', 33, lo, hi], ['sentence', 33, lo, hi], ['truefalse', 33], ['sentpic', 33, lo, hi], ['truefalse', 33], ['buildW', 33, 'mid']]);
 function textIsland(id, title, set, texts, can) {
   const one = (T, i) => lv(`Рассказ «${T.title}»`, `Прочитать рассказ из ${T.s.length} предложений и ответить на вопросы`,
     `Сегодня читаем рассказ. Он называется: ${T.title}. Читай не спеша. Если трудно — нажми на предложение, и я помогу. Потом я задам вопросы.`,
-    [...T.q.map((_, q) => ['story', set, i, q]), ['textSent', set, i], ['textSent', set, i], ['truefalse', 33], ...(T.q.length < 4 ? [['wordpic', 33, 'long']] : [])]);
+    [...T.q.map((_, q) => ['story', set, i, q]), ['readT', set, i], ['textSent', set, i], ['textSent', set, i], ...(T.q.length < 4 ? [['truefalse', 33]] : [])]);
   const t = texts.map(one);
   return { id, line: 'R', title, topic: set === 's' ? 'Рассказы из 4 предложений' : 'Рассказы из 7–8 предложений', can,
     levels: [...t.slice(0, 4), REV(), ...t.slice(4, 8), REV('Праздник острова')] };
@@ -389,6 +389,28 @@ const MATH = [
   ] },
 ];
 
+// --- время и деньги ---
+MATH.push({ id: 'm11', line: 'M', title: 'Остров Часов и Монет', topic: 'Время и деньги: часы, дни недели, месяцы, времена года, монеты', can: 'узнаёт время по часам, знает дни недели, месяцы и времена года, считает монеты', levels: [
+  lv('Часы: ровно час', 'Узнавать по часам целые часы', 'На часах две стрелки. Короткая показывает час. Когда длинная стрелка смотрит прямо вверх — значит, ровно час.',
+    [['clockFind', 0], ['clockRead', 0], ['clockFind', 0], ['listenN', 1, 12], ['clockRead', 0], ['clockFind', 0], ['clockRead', 0]]),
+  lv('Половина часа', 'Узнавать по часам половину часа', 'Когда длинная стрелка смотрит прямо вниз — прошло полчаса, тридцать минут. Короткая стрелка стоит между двумя числами.',
+    [['clockFind', 30], ['clockRead', 30], ['clockFind', 0], ['clockFind', 30], ['clockRead', 0], ['clockRead', 30], ['clockFind', 30]]),
+  lv('Утро, день, вечер, ночь', 'Различать части суток', 'В сутках есть утро, день, вечер и ночь. Утром мы просыпаемся, днём играем, вечером ужинаем, ночью спим.',
+    [['daypart'], ['daypart'], ['clockFind', 0], ['daypart'], ['daypart'], ['clockRead', 0], ['daypart']]),
+  lv('Дни недели', 'Знать дни недели по порядку', 'В неделе семь дней: понедельник, вторник, среда, четверг, пятница, суббота, воскресенье.',
+    [['weekday', 'order'], ['weekday', 'next'], ['weekday', 'next'], ['weekday', 'order'], ['weekday', 'next'], ['daypart'], ['weekday', 'next']]),
+  REV(),
+  lv('Вчера, сегодня, завтра', 'Понимать слова «вчера», «сегодня», «завтра»', 'Сегодня — это день, который идёт сейчас. Завтра — следующий день. Вчера — тот, что уже прошёл.',
+    [['weekday', 'tomorrow'], ['weekday', 'prev'], ['weekday', 'tomorrow'], ['weekday', 'next'], ['weekday', 'tomorrow'], ['weekday', 'order'], ['weekday', 'prev']]),
+  lv('Времена года', 'Знать четыре времени года', 'Времён года четыре: зима, весна, лето и осень. Зимой снег, весной тают ручьи, летом тепло, осенью падают листья.',
+    [['season'], ['season'], ['month'], ['season'], ['month'], ['season'], ['month']]),
+  lv('Месяцы', 'Знать месяцы и их порядок', 'В году двенадцать месяцев. В каждом времени года — по три месяца. Год начинается с января.',
+    [['month'], ['month', 'next'], ['month'], ['month', 'next'], ['season'], ['month', 'next'], ['month']]),
+  lv('Монеты', 'Считать монеты и сдачу', 'Монеты бывают разные: один рубль, два, пять и десять. Чтобы узнать, сколько денег, монеты складывают.',
+    [['coinSum', 2], ['shop', 5, 12], ['coinSum', 3], ['change', 10], ['shop', 11, 20], ['coinSum', 3], ['change', 20]]),
+  REV('Праздник острова'),
+] });
+
 // ====================== УМНОЖЕНИЕ ======================
 const xex = k => [['xexPick', k], ['xexKey', k], ['xexBub', k], ['xexTF', k], ['xexPairs', k], ['xexKey', k], ['xexMem', k]];
 const T_W = { 2: 'два', 3: 'три', 4: 'четыре', 5: 'пять' };
@@ -481,10 +503,12 @@ const DIVISION = [
 
 // ====================== ПОРЯДОК ОСТРОВОВ ======================
 // Линии чередуются: после букв — счёт, потом письмо и так далее.
-const ROUTE = 'r1 m1 w1 r2 m2 w2 r3 m3 r4 w3 m4 r5 m5 r6 w4 m6 r7 w5 x1 r8 m7 w6 x2 r9 m8 w7 x3 r10 m9 w8 x4 r11 m10 x5 r12 d1 x6 d2'.split(' ');
+const ROUTE = 'r1 m1 w1 r2 m2 w2 r3 m3 r4 w3 m4 r5 m5 r6 w4 m6 r7 w5 x1 r8 m7 w6 x2 r9 m8 w7 x3 r10 m9 w8 x4 r11 m10 x5 r12 d1 x6 m11 d2'.split(' ');
+// Какие острова надо пройти раньше: печатную букву пишем после того, как научились её читать, и так далее.
+const NEEDS = { w2: ['r2'], w3: ['r4'], w4: ['r6'], w5: ['r7'], w6: ['r7'], w7: ['r7'], w8: ['r7'], x1: ['m6'], d1: ['x5'], m11: ['m8'] };
 const byId = Object.fromEntries([...READING, ...WRITING, ...MATH, ...MULT, ...DIVISION].map(i => [i.id, i]));
 
-export const ISLANDS = ROUTE.map((id, n) => ({ ...byId[id], n, sticker: STICKERS[n] }));
+export const ISLANDS = ROUTE.map((id, n) => ({ ...byId[id], n, sticker: STICKERS[n], needs: NEEDS[id] || [] }));
 
 // Заполняем уровни-повторения заданиями из пройденного.
 ISLANDS.forEach((isl, n) => {

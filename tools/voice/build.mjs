@@ -55,7 +55,7 @@ if (todo.length) {
       } catch (e) { failed++; if (failed <= 5) console.error(`  не получилось: «${it.text}» — ${e.message.split('\n')[0]}`); }
     }
   };
-  await Promise.all(Array.from({ length: 4 }, worker));
+  await Promise.all(Array.from({ length: todo.length < 30 ? 1 : 4 }, worker)); // остатки озвучиваем по одной: сервис иногда отказывает при нескольких запросах сразу
   console.log(`Озвучено сейчас: ${done} (примерно ${(done * PRICE_PER_REQUEST).toFixed(0)} ₽). Не получилось: ${failed}.`);
 }
 

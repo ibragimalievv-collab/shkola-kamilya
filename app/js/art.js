@@ -37,7 +37,7 @@ const ANIMALS = [
   ['#c9a27a', '#6b4423', 'r', 'qz'], ['#d9772e', '#fff1d6', 'c', 'z'], ['#a7a9ad', '#3d3d3d', 'c', 'kz'], ['#c98b4f', '#fff1d6', 'h', 'fz'],
   ['#e9e2d0', '#8d99ae', 'h', 'd'], ['#ffe066', '#ff924c', '-', 'b'], ['#f3c98b', '#fff1d6', 'r', 'zw'], ['#c9d6e2', '#eef3f8', '-', 'wz'],
   ['#8e97a6', '#e9ecef', 'c', 'z'], ['#b5733c', '#5c4033', 'c', 'mz'], ['#4f8fd9', '#cfe8ff', '-', 'xz'], ['#57c785', '#ffd43b', 'h', 'fz'],
-  ['#6ea8fe', '#e7f5ff', '-', 'z'], ['#8bc34a', '#f1f8e9', '-', 'fz'],
+  ['#6ea8fe', '#e7f5ff', '-', 'z'], ['#c9a27a', '#fff1d6', 't', 'bp'], ['#8bc34a', '#f1f8e9', '-', 'fz'],
 ];
 export function animalSVG(i) {
   const [c, c2, ears, feat] = ANIMALS[i % ANIMALS.length], has = x => feat.includes(x), dark = '#2b2d42';

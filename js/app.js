@@ -71,7 +71,12 @@ function welcome() {
   screen('welcome',
     h('h1', { class: 'logo' }, 'Школа ', h('span', {}, store.profile.name === 'Камиль' ? 'Камиля' : '· ' + store.profile.name)),
     hero('happy', 'big bounce'),
-    ibtn('▶', 'начать', start, 'play huge'));
+    ibtn('▶', 'начать', start, 'play huge'),
+    // Кнопка для взрослого: вписать имя своего ребёнка (то же самое есть в разделе «Для родителей»).
+    h('button', { class: 'name-btn', onclick: () => {
+      const n = prompt('Как зовут ребёнка? Это имя будет на заставке и в разделе для родителей.', store.profile.name);
+      if (n && n.trim()) { store.profile.name = n.trim().slice(0, 20); store.save(); welcome(); }
+    } }, '✏️ Имя ребёнка: ' + store.profile.name));
 }
 
 // ---------- раскрась своего помощника ----------

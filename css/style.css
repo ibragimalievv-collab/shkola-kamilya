@@ -427,3 +427,4 @@ svg { display: block; width: 100%; height: 100%; }
 .album figure { margin: 0; break-inside: avoid; text-align: center; font: 16px system-ui, sans-serif; }
 .album img { max-width: 100%; max-height: 80mm; border: 1px solid #ccc; border-radius: 3mm; }
 .opts.col .opt { max-width: 94vw; } .opt .pic.small { white-space: normal; word-break: break-all; line-height: 1.25; }
+.name-btn { background: #fff3; color: #fff; border-radius: 4vmin; padding: 1.2vmin 3vmin; font: 600 clamp(14px, 2.4vmin, 18px) system-ui, sans-serif; min-height: 44px; }

@@ -26,7 +26,8 @@ export const PALETTE = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#52b788', '
 // [цвет, второй цвет, уши, особенности]
 // уши: c острые, r круглые, l длинные, b большие, f висячие, h рожки, t хохолок, - нет
 // особенности: w усы, m грива, s полоски, t хобот, b клюв, p пятна у глаз, n пятачок, q иголки, k маска,
-//              f пятнышки, z светлая мордочка, c клешни, x фонтан, e глаза сверху, u кудряшки, d бородка
+//              f пятнышки, z светлая мордочка, c клешни, x фонтан, e глаза сверху, u кудряшки, d бородка,
+//              y пушистый хвост, v широкий утиный клюв, B чёлка и белая полоска на лбу, D плавник и длинный нос, S панцирь
 const ANIMALS = [
   ['#f6a94a', '#fff1d6', 'c', 'wz'], ['#f2634b', '#f2634b', '-', 'c'], ['#efe9e1', '#ffc2d1', 'l', 'w'], ['#b9bcc6', '#ffc2d1', 'b', 'w'],
   ['#ffffff', '#ffb703', '-', 'b'], ['#f27d2e', '#fff1d6', 'c', 'z'], ['#f5c04a', '#c9792b', 'r', 'm'], ['#a8713f', '#e6c9a8', 'r', 'z'],
@@ -34,10 +35,10 @@ const ANIMALS = [
   ['#a9a9b3', '#e9e9ef', 'b', 'n'], ['#a86b3c', '#f0c9a0', 'b', 'z'], ['#f7a8b8', '#f48ba0', 'c', 'n'], ['#6cc24a', '#6cc24a', '-', 'e'],
   ['#ffffff', '#5c4033', 'h', 'fn'], ['#f4f1e8', '#3d3d3d', 'f', 'u'], ['#ffd84a', '#ff924c', 't', 'b'], ['#9a6b3f', '#e6c9a8', 'c', 'bp'],
   ['#2d3a4f', '#ffffff', '-', 'bz'], ['#f5c95a', '#b5651d', 'h', 'f'], ['#ffffff', '#2b2d42', 'c', 's'], ['#b79ac8', '#cdb4db', 'r', 'n'],
-  ['#c9a27a', '#6b4423', 'r', 'qz'], ['#d9772e', '#fff1d6', 'c', 'z'], ['#a7a9ad', '#3d3d3d', 'c', 'kz'], ['#c98b4f', '#fff1d6', 'h', 'fz'],
-  ['#e9e2d0', '#8d99ae', 'h', 'd'], ['#ffe066', '#ff924c', '-', 'b'], ['#f3c98b', '#fff1d6', 'r', 'zw'], ['#c9d6e2', '#eef3f8', '-', 'wz'],
-  ['#8e97a6', '#e9ecef', 'c', 'z'], ['#b5733c', '#5c4033', 'c', 'mz'], ['#4f8fd9', '#cfe8ff', '-', 'xz'], ['#57c785', '#ffd43b', 'h', 'fz'],
-  ['#6ea8fe', '#e7f5ff', '-', 'z'], ['#c9a27a', '#fff1d6', 't', 'bp'], ['#8bc34a', '#f1f8e9', '-', 'fz'],
+  ['#c9a27a', '#6b4423', 'r', 'qz'], ['#c2571a', '#fff1d6', 'c', 'zy'], ['#a7a9ad', '#3d3d3d', 'c', 'kz'], ['#c98b4f', '#fff1d6', 'h', 'fz'],
+  ['#e9e2d0', '#8d99ae', 'h', 'd'], ['#ffe066', '#ff924c', '-', 'v'], ['#f3c98b', '#fff1d6', 'r', 'zw'], ['#c9d6e2', '#eef3f8', '-', 'wz'],
+  ['#8e97a6', '#e9ecef', 'c', 'z'], ['#b5733c', '#5c4033', 'c', 'Bn'], ['#4f8fd9', '#cfe8ff', '-', 'xz'], ['#57c785', '#ffd43b', 'h', 'fz'],
+  ['#6ea8fe', '#e7f5ff', '-', 'D'], ['#c9a27a', '#fff1d6', 't', 'bp'], ['#8bc34a', '#3f7d20', '-', 'S'],
 ];
 export function animalSVG(i) {
   const [c, c2, ears, feat] = ANIMALS[i % ANIMALS.length], has = x => feat.includes(x), dark = '#2b2d42';
@@ -59,6 +60,10 @@ export function animalSVG(i) {
   if (has('c')) back += `<path d="M14 40 q-16 -12 -6 -28 q4 12 14 8 q-10 6 2 18z M106 40 q16 -12 6 -28 q-4 12 -14 8 q10 6 -2 18z" fill="${c}" ${st}/>`;
   if (has('x')) back += `<path d="M60 24 q-2 -14 -14 -16 M60 24 q2 -14 14 -16" fill="none" stroke="#74c0fc" stroke-width="5" stroke-linecap="round"/>`;
   if (has('e')) back += `<circle cx="40" cy="30" r="15" fill="${c}" ${st}/><circle cx="80" cy="30" r="15" fill="${c}" ${st}/>`;
+  if (has('y')) back = `<path d="M96 96 q34 -6 30 -44 q-4 -30 -30 -22 q18 8 12 30 q-4 16 -22 14z" fill="${c}" ${st}/>` + back;
+  if (has('S')) back = `<ellipse cx="60" cy="74" rx="58" ry="40" fill="${c2}" ${st}/><path d="M22 70 h76 M40 44 v60 M80 44 v60" stroke="#2f5d18" stroke-width="3" fill="none"/>` + back;
+  if (has('D')) back = `<path d="M50 24 q10 -24 26 -18 q-8 10 -6 22z" fill="${c}" ${st}/>` + back;
+  if (has('B')) front += `<path d="M44 22 q16 -16 32 0 q-4 18 -16 22 q-12 -4 -16 -22z" fill="${c2}" ${st}/><path d="M56 40 q4 -4 8 0 l-2 26 h-4z" fill="#fff"/>`;
   if (has('u')) front += `<path d="M30 38 q4 -16 16 -8 q6 -14 16 -2 q10 -12 16 2 q12 -8 14 10 q-30 10 -62 -2z" fill="#fff" ${st}/>`;
   if (has('z')) front += `<ellipse cx="60" cy="80" rx="24" ry="18" fill="${c2}"/>`;
   if (has('s')) front += `<path d="M22 50 l14 5 M20 66 l14 0 M98 50 l-14 5 M100 66 l-14 0 M52 22 l2 14 M68 22 l-2 14" stroke="${ANIMALS[i][1] === '#fff1d6' ? dark : c2}" stroke-width="5" stroke-linecap="round"/>`;
@@ -68,13 +73,17 @@ export function animalSVG(i) {
   const ey = has('e') ? 30 : 58, light = has('p') || has('k');
   front += `<circle cx="42" cy="${ey}" r="6" fill="${light ? '#fff' : dark}"/><circle cx="78" cy="${ey}" r="6" fill="${light ? '#fff' : dark}"/>` + (light ? `<circle cx="42" cy="${ey}" r="3" fill="${dark}"/><circle cx="78" cy="${ey}" r="3" fill="${dark}"/>` : `<circle cx="44" cy="${ey - 2}" r="2" fill="#fff"/><circle cx="80" cy="${ey - 2}" r="2" fill="#fff"/>`);
   front += '<circle cx="26" cy="76" r="7" fill="#ff8fa3" opacity=".6"/><circle cx="94" cy="76" r="7" fill="#ff8fa3" opacity=".6"/>';
-  if (has('b')) front += `<polygon points="48,70 72,70 60,88" fill="${c2 === '#ffffff' || c2 === '#e6c9a8' ? '#ff924c' : c2}" ${st}/>`;
+  if (has('v')) front += `<ellipse cx="60" cy="80" rx="20" ry="9" fill="${c2}" ${st}/><path d="M42 80 h36" stroke="${dark}" stroke-width="2"/>`;
+  else if (has('D')) front += `<ellipse cx="60" cy="84" rx="24" ry="12" fill="${c2}" ${st}/><path d="M42 84 q18 8 36 0" fill="none" stroke="${dark}" stroke-width="3" stroke-linecap="round"/>`;
+  else if (has('S')) front += `<path d="M48 80 q12 10 24 0" fill="none" stroke="${dark}" stroke-width="3" stroke-linecap="round"/>`;
+  else if (has('b')) front += `<polygon points="48,70 72,70 60,88" fill="${c2 === '#ffffff' || c2 === '#e6c9a8' ? '#ff924c' : c2}" ${st}/>`;
   else if (has('t')) front += `<path d="M52 70 q8 -6 16 0 q2 26 -6 34 q-10 4 -8 -8 q4 -8 -2 -26z" fill="${c}" ${st}/>`;
   else if (has('n')) front += `<ellipse cx="60" cy="82" rx="20" ry="14" fill="${c2 === '#5c4033' ? '#ffc2d1' : c2}" ${st}/><circle cx="53" cy="82" r="3" fill="${dark}"/><circle cx="67" cy="82" r="3" fill="${dark}"/>`;
   else front += `<ellipse cx="60" cy="74" rx="6" ry="4" fill="${dark}"/><path d="M60 78 q-8 12 -16 4 M60 78 q8 12 16 4" fill="none" stroke="${dark}" stroke-width="3" stroke-linecap="round"/>`;
   if (has('w')) front += `<path d="M30 78 l-22 -5 M30 84 l-22 3 M90 78 l22 -5 M90 84 l22 3" stroke="${dark}" stroke-width="2" stroke-linecap="round"/>`;
   if (has('d')) front += `<path d="M52 104 q8 16 16 0z" fill="${c}" ${st}/>`;
-  return `<svg viewBox="-8 -8 136 128" class="animal">${back}<ellipse cx="60" cy="62" rx="44" ry="42" fill="${c}" ${st}/>${front}</svg>`;
+  const head = has('S') ? `<ellipse cx="60" cy="66" rx="32" ry="30" fill="${c}" ${st}/>` : `<ellipse cx="60" cy="62" rx="44" ry="42" fill="${c}" ${st}/>`;
+  return `<svg viewBox="-8 -8 136 128" class="animal">${back}${head}${front}</svg>`;
 }
 
 // ---------- остров на карте ----------

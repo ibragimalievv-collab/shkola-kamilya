@@ -1,5 +1,6 @@
 // ХРАНИЛИЩЕ: профили детей, прогресс, настройки. Всё лежит на самом устройстве.
 // Экран не трогаем, поэтому файл проверяется автоматически (см. tests/).
+// Старые сохранения читаются как есть: новые поля добавляются сами, прогресс не теряется.
 
 import { LEVELS, ISLANDS } from './curriculum.js';
 import { today } from './util.js';
@@ -12,27 +13,37 @@ const newProfile = name => ({
   heroDone: false,          // раскрасил ли ребёнок своего помощника
   hero: { ...HERO_DEFAULT },
   levels: {},               // номер уровня → сколько звёзд (1–3)
-  weak: [],                 // что повторять: [{ s: рецепт задания, n: сколько раз ещё вернуть }]
-  days: {},                 // дата → { sec: секунд занятий, levels: пройдено уровней }
+  weak: [],                 // умное повторение: [{ s: рецепт задания, n: верных подряд, due: когда вернуть }]
+  days: {},                 // дата → { sec: секунд занятий, levels: пройдено уровней, ids: какие именно }
   gallery: [],              // последние рисунки ребёнка
   overrides: {},            // остров → 'open' | 'closed' (решение родителя)
 });
 const fresh = () => ({ v: 1, current: 'p1', profiles: { p1: newProfile('Камиль') }, settings: { voice: '', rate: 0.9, dailyLimit: 0, volVoice: 1, volSfx: 1 } });
 
-export function createStore(storage) {
+// Уровни по линиям: в каждой линии уровни идут строго по порядку.
+const lineOfIsland = isl => (isl.line === 'D' ? 'X' : isl.line); // умножение и деление — одна дорожка
+const BY_LINE = {};
+for (const l of LEVELS) (BY_LINE[lineOfIsland(ISLANDS[l.island])] ||= []).push(l);
+const addDays = (dstr, n) => { const d = new Date(dstr + 'T12:00:00'); d.setDate(d.getDate() + n); return today(d); };
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+export function createStore(storage, now = () => today()) {
   let state;
   try { state = JSON.parse(storage.getItem(KEY)) || fresh(); } catch { state = fresh(); }
   if (!state.profiles || !state.profiles[state.current]) state = fresh();
 
   const save = () => { try { storage.setItem(KEY, JSON.stringify(state)); } catch { /* память переполнена — играем дальше */ } };
   const p = () => state.profiles[state.current];
-  const day = () => (p().days[today()] ||= { sec: 0, levels: 0 });
+  const day = () => (p().days[now()] ||= { sec: 0, levels: 0 });
+  const done = id => !!p().levels[id];
 
   const api = {
     get state() { return state; },
     get settings() { return state.settings; },
     get profile() { return p(); },
     save,
+    // Раздел профиля, которого могло не быть в старом сохранении: store.part('home', {})
+    part(key, initial) { return (p()[key] ??= initial); },
 
     // --- профили ---
     addProfile(name) {
@@ -53,47 +64,84 @@ export function createStore(storage) {
 
     // --- уровни ---
     stars: id => p().levels[id] || 0,
-    // Уровень открыт, если это самый первый, или пройден предыдущий, или родитель открыл остров.
+    islandOpen(isl) { return isl.levels.some(l => api.isOpen(l)); },
+    islandDone(isl) { return isl.levels.every(l => done(l.id)); },
+    // Остров, до которого ребёнок дошёл по общей дороге.
+    frontier() { const l = LEVELS.find(x => !done(x.id)); return l ? l.island : ISLANDS.length - 1; },
+    // Уровень открыт, если пройден предыдущий уровень той же линии, пройдены острова, без которых его не понять,
+    // и он не слишком далеко впереди. Так каждый день можно заниматься разным: чтением, счётом и письмом.
     isOpen(level) {
-      const o = p().overrides[ISLANDS[level.island].id];
+      const isl = ISLANDS[level.island], o = p().overrides[isl.id];
       if (o === 'closed') return false;
       if (o === 'open') return true;
-      const i = LEVELS.indexOf(level);
-      return i === 0 || !!p().levels[LEVELS[i - 1].id];
+      const line = BY_LINE[lineOfIsland(isl)], i = line.indexOf(level);
+      if (i > 0 && !done(line[i - 1].id)) return false;
+      if ((isl.needs || []).some(id => !api.islandDone(ISLANDS.find(x => x.id === id)))) return false;
+      return isl.n <= api.frontier() + 6;
     },
-    islandOpen(isl) { return isl.levels.some(l => api.isOpen(l)); },
-    islandDone(isl) { return isl.levels.every(l => p().levels[l.id]); },
-    // Следующий уровень, который ждёт ребёнка.
-    nextLevel() { return LEVELS.find(l => !p().levels[l.id] && api.isOpen(l)) || null; },
+    // Следующий уровень по общей дороге.
+    nextLevel() { return LEVELS.find(l => !done(l.id) && api.isOpen(l)) || null; },
+    // Следующий уровень на сегодня: три уровня из разных линий, чтение — обязательно и первым.
+    todayIds: () => (p().days[now()] || {}).ids || [],
+    dayDone: () => api.todayIds().length >= 3,
+    nextForToday() {
+      const played = new Set(api.todayIds().map(id => lineOfIsland(ISLANDS[LEVELS.find(l => l.id === id)?.island ?? 0])));
+      const nextIn = line => BY_LINE[line].find(l => !done(l.id) && api.isOpen(l));
+      const turn = new Date(now() + 'T12:00:00').getDate() % 3, rest = ['M', 'W', 'X'];
+      const order = ['R', ...rest.slice(turn), ...rest.slice(0, turn)];
+      for (const line of order) if (!played.has(line)) { const l = nextIn(line); if (l) return l; }
+      return api.nextLevel();
+    },
     // Записать результат; вернуть, получена ли наклейка за остров.
     finishLevel(level, stars) {
       const isl = ISLANDS[level.island], was = api.islandDone(isl);
       p().levels[level.id] = Math.max(p().levels[level.id] || 0, stars);
       day().levels++;
+      (day().ids ||= []).push(level.id);
       save();
       return { sticker: !was && api.islandDone(isl) };
     },
     setOverride(islandId, v) { if (v) p().overrides[islandId] = v; else delete p().overrides[islandId]; save(); },
+    // Проверка на входе: отметить знакомые уровни пройденными (родитель может вернуть их).
+    skipLevels(ids) { const sk = api.part('skipped', {}); for (const id of ids) if (!done(id)) { p().levels[id] = 1; sk[id] = 1; } save(); },
+    unskipAll() { const sk = api.part('skipped', {}); for (const id of Object.keys(sk)) delete p().levels[id]; p().skipped = {}; save(); },
 
-    // --- повторение ошибок ---
+    // --- умное повторение ---
+    // Ошибка возвращается через день, потом через три дня, потом через неделю — пока не будет трёх верных ответов подряд.
     addWeak(src) {
-      const k = JSON.stringify(src), w = p().weak.find(x => JSON.stringify(x.s) === k);
-      if (w) w.n = Math.min(3, w.n + 1); else p().weak.push({ s: src, n: 2 });
-      if (p().weak.length > 40) p().weak.shift();
+      const w = p().weak.find(x => same(x.s, src));
+      if (w) { w.n = 0; w.due = addDays(now(), 1); } else p().weak.push({ s: src, n: 0, due: addDays(now(), 1) });
+      if (p().weak.length > 60) p().weak.shift();
       save();
     },
     fixWeak(src) {
-      const k = JSON.stringify(src), i = p().weak.findIndex(x => JSON.stringify(x.s) === k);
+      const i = p().weak.findIndex(x => same(x.s, src));
       if (i < 0) return;
-      if (--p().weak[i].n <= 0) p().weak.splice(i, 1);
+      const w = p().weak[i];
+      w.n = (w.n || 0) + 1;
+      if (w.n >= 3) p().weak.splice(i, 1); else w.due = addDays(now(), w.n === 1 ? 3 : 7);
       save();
     },
-    weakList: () => p().weak.map(x => x.s),
+    // Что пора повторить сегодня (старые записи без даты считаем готовыми к повторению).
+    weakList: () => p().weak.filter(x => !x.due || x.due <= now()).map(x => x.s),
+    weakAll: () => p().weak,
 
-    // --- время занятий ---
+    // --- время занятий и цепочка дней ---
     addTime(sec) { day().sec += Math.max(0, Math.min(sec, 20 * 60)); save(); },
-    todaySec: () => (p().days[today()] || { sec: 0 }).sec,
+    todaySec: () => (p().days[now()] || { sec: 0 }).sec,
     overLimit() { const m = state.settings.dailyLimit; return m > 0 && api.todaySec() >= m * 60; },
+    // Сколько дней подряд ребёнок занимается. Один пропуск за семь дней цепочку не рвёт.
+    streak() {
+      const played = d => (p().days[d]?.levels || 0) > 0;
+      let d = now(), n = 0, lastMiss = -99;
+      if (!played(d)) d = addDays(d, -1); // сегодняшний день ещё впереди
+      for (let i = 0; i < 400; i++, d = addDays(d, -1)) {
+        if (played(d)) n++;
+        else if (n > 0 && i - lastMiss >= 7 && played(addDays(d, -1))) lastMiss = i; // простили один пропуск
+        else break;
+      }
+      return n;
+    },
 
     // --- рисунки ---
     addArt(dataUrl) { p().gallery.unshift(dataUrl); p().gallery.length = Math.min(p().gallery.length, 12); save(); },

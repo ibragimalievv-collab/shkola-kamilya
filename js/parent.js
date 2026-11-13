@@ -7,6 +7,7 @@ import { say, hush, sfx, russianVoices } from './audio.js';
 import { P } from './phrases.js';
 import { penParent } from './pen.js';
 import { voiceStudio } from './voice.js';
+import { parentExtras } from './parent2.js';
 
 const btn = (text, fn, cls = '') => h('button', { class: 'pbtn ' + cls, onclick: fn }, text);
 const card = (title, ...kids) => h('section', { class: 'pbox' }, h('h2', {}, title), ...kids);
@@ -106,7 +107,7 @@ function parentScreen(ctx) {
   hush();
   app.className = 'screen parent';
   app.replaceChildren(h('div', { class: 'bar' }, h('button', { class: 'ibtn', 'aria-label': 'назад', onclick: back }, '🗺️'), h('h1', {}, 'Для родителей')),
-    profiles, progress, voiceStudio(), penParent({ store, again, app }), weak, time, settings, islands, data);
+    profiles, ...parentExtras({ store, again, placement: ctx.placement }), progress, voiceStudio(), penParent({ store, again, app }), weak, time, settings, islands, data);
   app.scrollTop = 0;
 }
 

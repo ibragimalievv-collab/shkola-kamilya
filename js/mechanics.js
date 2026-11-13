@@ -198,7 +198,7 @@ function copy(t, c) {
   const b = makeBoard({ brush: 16 });
   drawLines(b);
   const need = Math.min(500, 60 + 70 * t.text.replace(/\s/g, '').length);
-  const go = () => (b.ink() >= need ? c.ok() : c.say(P.needWrite));
+  const go = () => { if (b.ink() < need) return c.say(P.needWrite); if (t.text.length > 2) c.saveWord?.(b.dataUrl(), t.text); c.ok(); }; // написанные слова собираются в альбом
   c.root.append(row('copy-top', h('div', { class: 'sample' }, t.text), check(c, go)), b.el);
   return { reveal: () => {}, auto: () => { b.addStroke([[20, 20], [20 + need, 20], [20, 60], [20 + need, 60]]); go(); } };
 }
@@ -248,7 +248,9 @@ function drawtask(t, c) {
 // ---------- 18. Посчитай предметы ----------
 function count(t, c) {
   const cellsIdx = shuffle(c.rng, range(0, 19)).slice(0, t.n);
-  const field = row('field', ...range(0, 19).map(i => h('span', { class: cellsIdx.includes(i) ? 'in' : '' }, cellsIdx.includes(i) ? t.emoji : '')));
+  // Иногда считаем не картинки из набора, а героя, которого ребёнок нарисовал сам.
+  const mine = c.myPic && c.rng() < 0.4;
+  const field = row('field', ...range(0, 19).map(i => h('span', { class: cellsIdx.includes(i) ? 'in' : '' }, cellsIdx.includes(i) ? (mine ? h('img', { class: 'pet tiny', src: c.myPic, alt: '' }) : t.emoji) : '')));
   const btns = t.opts.map((o, i) => B(c, 'opt', face(o), () => choose(i)));
   function choose(i) { if (i === t.a) { btns[i].classList.add('right'); c.ok(); } else { btns[i].classList.add('wrong'); btns[i].disabled = true; c.miss(); } }
   c.root.append(field, row('opts', ...btns));
@@ -469,7 +471,54 @@ function share(t, c) {
   return { reveal: solve, auto: () => { solve(); go(); } };
 }
 
-const MECH = { share, bubbles: collect, fish: collect, find: collect, pick, listen: pick, story: pick, memory, pairs, baskets, build, missing, claps,
+// ---------- 35. Часы ----------
+function clockSVG(hh, mm) {
+  const hand = (deg, len, w, col) => { const a = ((deg - 90) * Math.PI) / 180; return `<line x1="50" y1="50" x2="${50 + len * Math.cos(a)}" y2="${50 + len * Math.sin(a)}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`; };
+  const nums = range(1, 12).map(n => { const a = ((n * 30 - 90) * Math.PI) / 180; return `<text x="${50 + 37 * Math.cos(a)}" y="${53.5 + 37 * Math.sin(a)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2b2d42">${n}</text>`; }).join('');
+  return `<svg viewBox="0 0 100 100" class="clockface"><circle cx="50" cy="50" r="47" fill="#fff" stroke="#4895ef" stroke-width="5"/>${nums}${hand(hh * 30 + mm / 2, 22, 5, '#ff6b6b')}${hand(mm * 6, 33, 3, '#2b2d42')}<circle cx="50" cy="50" r="3.5" fill="#2b2d42"/></svg>`;
+}
+function clock(t, c) {
+  const btns = t.opts.map((o, i) => B(c, 'opt' + (typeof o === 'object' ? ' clockopt' : ''), typeof o === 'object' ? h('span', { html: clockSVG(o.h, o.m) }) : face(o), () => choose(i)));
+  function choose(i) { if (i === t.a) { btns[i].classList.add('right'); c.ok(); } else { btns[i].classList.add('wrong'); btns[i].disabled = true; c.miss(); } }
+  if (t.show) c.root.append(h('div', { class: 'bigclock', html: clockSVG(t.show.h, t.show.m) }));
+  c.root.append(row('opts', ...btns));
+  return { reveal: () => btns[t.a].classList.add('right', 'glow'), auto: () => choose(t.a) };
+}
+
+// ---------- 36. Чтение вслух с записью ----------
+function readaloud(t, c) {
+  let rec = null, blob = null, url = null;
+  const mine = new Audio();
+  const mic = B(c, 'drum mic', '🎤', toggle), me = B(c, 'ibtn', '👂', () => playMine()), sample = B(c, 'ibtn speak', '🔊', () => c.say(t.sample)), okBtn = check(c, finish);
+  me.disabled = okBtn.disabled = true;
+  const playMine = then => { c.say(''); mine.onended = then || null; mine.currentTime = 0; mine.play().catch(() => then?.()); };
+  async function toggle() {
+    if (rec) return rec.stop();
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { okBtn.disabled = false; return c.say(P.noMic); }
+    const chunks = [];
+    rec = new MediaRecorder(stream);
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = () => {
+      stream.getTracks().forEach(x => x.stop());
+      blob = new Blob(chunks, { type: rec.mimeType }); rec = null;
+      mic.classList.remove('recording');
+      if (url) URL.revokeObjectURL(url);
+      mine.src = url = URL.createObjectURL(blob);
+      me.disabled = okBtn.disabled = false;
+      playMine(() => c.say(t.sample)); // сначала его голос, потом образец
+    };
+    mic.classList.add('recording');
+    rec.start();
+    c.later(() => rec?.state === 'recording' && rec.stop(), 15000);
+  }
+  function finish() { if (blob) c.saveRead?.(blob, t.text); c.ok(); }
+  c.root.append(h('div', { class: 'bigtext' + (t.text.length > 8 ? ' long' : '') }, t.text), mic, row('opts', me, sample, okBtn));
+  return { reveal: () => {}, auto: () => c.ok() };
+}
+
+const MECH = { clock, readaloud, share, bubbles: collect, fish: collect, find: collect, pick, listen: pick, story: pick, memory, pairs, baskets, build, missing, claps,
   truefalse, trace, copy, draw, drawtask, count, feed, train, compare, house, numline, keypad, tenframe, shop, problem, dots, stones, paint, chart, groups, array };
 
 // Показать задание на экране.

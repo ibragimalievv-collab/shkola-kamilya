@@ -584,6 +584,71 @@ def('array', 'X', 'ряды и столбики', (r, rmax, cmin, cmax) => {
   return { m: 'array', say: `Закрась клетки: в высоту ${rows}, в ширину ${cols}. Нажми на клетку — закрасится прямоугольник. Потом нажми галочку.`, rows, cols, key: 'arr' + rows + cols };
 });
 
+// ===== ЧТЕНИЕ ВСЛУХ С ЗАПИСЬЮ =====
+// Ребёнок читает в микрофон, слушает себя и образец. Распознавания речи нет: оценивает он сам и родитель.
+def('readW', 'R', 'чтение вслух', (r, s, f) => {
+  const w = pickR(r, pool(s, f, false, 1));
+  return { m: 'readaloud', say: 'Прочитай слово вслух. Нажми на микрофон, прочитай и нажми ещё раз. Потом послушай себя и меня.', text: disp(w.w, s), sample: tokW(w.w), key: 'ra' + w.w };
+});
+def('readS', 'R', 'чтение вслух', (r, s, lo, hi) => {
+  const p = sentPool(s, lo, hi);
+  if (!p.length) return call('readW', r, s);
+  const x = pickR(r, p);
+  return { m: 'readaloud', say: 'Прочитай предложение вслух. Нажми на микрофон, прочитай и нажми ещё раз. Потом послушай себя и меня.', text: x.t, sample: x.t, key: 'ra' + x.t };
+});
+def('readT', 'R', 'чтение вслух', (r, set, ti) => {
+  const t = pickR(r, textOf(set, ti).s);
+  return { m: 'readaloud', say: 'Прочитай предложение из рассказа вслух. Нажми на микрофон, прочитай и нажми ещё раз. Потом послушай себя и меня.', text: t, sample: t, key: 'ra' + t };
+});
+
+// ===== ВРЕМЯ И ДЕНЬГИ =====
+const HOURS = ['час', 'часа', 'часов'];
+const clockSay = (h, m) => `${h} ${pl(h, HOURS)}${m ? ' 30 минут' : ' ровно'}`;
+def('clockFind', 'M', 'часы', (r, half) => {
+  const m = half ? 30 : 0, h = rint(r, 1, 12), opts = shuffle(r, [h, ...sample(r, range(1, 12).filter(x => x !== h), 2)]).map(x => ({ h: x, m }));
+  return { m: 'clock', say: `Найди часы, которые показывают ${clockSay(h, m)}. Короткая стрелка показывает час.`, opts, a: opts.findIndex(o => o.h === h), key: 'cf' + h + m };
+});
+def('clockRead', 'M', 'часы', (r, half) => {
+  const m = half ? 30 : 0, h = rint(r, 1, 12), txt = x => `${x}:${m ? '30' : '00'}`;
+  return { m: 'clock', say: 'Который час? Посмотри на короткую стрелку и выбери ответ.', show: { h, m }, key: 'cr' + h + m, ...mk(r, txt(h), sample(r, range(1, 12).filter(x => x !== h), 2).map(txt), 2) };
+});
+const DAYPARTS = [['Когда мы завтракаем?', 0], ['Когда встаёт солнышко?', 0], ['Когда мы обедаем?', 1], ['Когда солнце высоко в небе?', 1], ['Когда мы ужинаем?', 2], ['Когда солнце садится?', 2], ['Когда на небе звёзды?', 3], ['Когда все спят?', 3]];
+def('daypart', 'M', 'утро, день, вечер, ночь', r => {
+  const [q, a] = pickR(r, DAYPARTS);
+  return { m: 'pick', say: `${q} Утром, днём, вечером или ночью?`, opts: ['🌅', '☀️', '🌇', '🌙'], a, key: 'dp' + q };
+});
+const WD = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+const WD_INS = ['понедельником', 'вторником', 'средой', 'четвергом', 'пятницей', 'субботой', 'воскресеньем'];
+const WD_GEN = ['понедельника', 'вторника', 'среды', 'четверга', 'пятницы', 'субботы', 'воскресенья'];
+def('weekday', 'M', 'дни недели', (r, mode) => {
+  const i = rint(r, 0, 6), others = k => sample(r, WD.filter((_, j) => j !== k), 2);
+  if (mode === 'order') { const a = rint(r, 0, 3); return { m: 'build', wide: true, say: `Расставь дни недели по порядку. Первый — ${WD[a]}.`, target: WD.slice(a, a + 4), extra: [], key: 'wo' + a }; }
+  const j = mode === 'prev' ? (i + 6) % 7 : (i + 1) % 7;
+  const say = mode === 'next' ? `Какой день недели идёт после ${WD_GEN[i]}?` : mode === 'prev' ? `Какой день недели идёт перед ${WD_INS[i]}?` : `Сегодня ${WD[i]}. Какой день будет завтра?`;
+  return { m: 'pick', say, longOpts: true, show: {}, key: 'wd' + mode + i, ...mk(r, WD[j], others(j), 2) };
+});
+const SEASONS = ['зима', 'весна', 'лето', 'осень'], SEASON_PIC = [['⛄', '❄️', '🎿'], ['🌷', '🌱', '🐣'], ['🏖️', '🍓', '🌻'], ['🍂', '🍄', '☔']];
+const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const seasonOf = m => [0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 0][m];
+def('season', 'M', 'времена года', r => {
+  const a = rint(r, 0, 3);
+  return { m: 'pick', say: 'Посмотри на картинку. Какое это время года?', show: { big: pickR(r, SEASON_PIC[a]) }, opts: SEASONS, a, key: 'se' + a + rint(r, 0, 2) };
+});
+def('month', 'M', 'месяцы', (r, mode) => {
+  const i = rint(r, 0, 11);
+  if (mode === 'next') { const j = (i + 1) % 12; return { m: 'pick', say: `Какой месяц идёт после ${MONTHS_GEN[i]}?`, longOpts: true, show: {}, key: 'mn' + i, ...mk(r, MONTHS[j], sample(r, MONTHS.filter((_, k) => k !== j), 2), 2) }; }
+  return { m: 'pick', say: `${cap(MONTHS[i])}. Какое это время года?`, show: { text: MONTHS[i], long: true }, opts: SEASONS, a: seasonOf(i), key: 'mo' + i };
+});
+def('coinSum', 'M', 'счёт монетками', (r, n) => {
+  const coins = Array.from({ length: n }, () => pickR(r, [1, 2, 5, 10])).sort((a, b) => b - a), sum = coins.reduce((a, b) => a + b, 0);
+  return { m: 'keypad', say: 'Сколько всего рублей? Сложи все монетки и набери ответ.', text: coins.map(c => `${c} ₽`).join(' + ') + ' =', a: sum, key: 'cs' + coins.join('') };
+});
+def('change', 'M', 'счёт монетками', (r, max) => {
+  const have = pickR(r, [10, 10, 20].filter(x => x <= max)), price = rint(r, 2, have - 1);
+  return { m: 'keypad', say: `Цена игрушки — ${price} ${pl(price, ['рубль', 'рубля', 'рублей'])}. У тебя ${have} рублей. Сколько сдачи тебе дадут?`, text: `${have} − ${price} =`, a: have - price, key: 'chg' + have + price };
+});
+
 // ===== ДЕЛЕНИЕ =====
 // Раздай поровну: ребёнок сам раскладывает предметы по тарелкам.
 def('share', 'D', 'деление поровну', (r, k, qmax) => {
@@ -617,6 +682,29 @@ export function labelOf(src) {
 }
 export const hasGen = name => !!G[name];
 
+// Подстройка сложности: level < 0 — проще (меньше лишнего на экране), level > 0 — чуть труднее.
+// Правильный ответ и смысл задания не меняются.
+export function adjust(t, level, r) {
+  if (!level) return t;
+  if (level < 0) {
+    if (Array.isArray(t.opts) && t.opts.length > 2 && typeof t.a === 'number' && !t.steps && t.m !== 'clock') { // оставляем верный ответ и один неверный
+      const keep = [t.opts[t.a], t.opts.find((_, i) => i !== t.a)], sh = shuffle(r, keep);
+      t.a = sh.indexOf(keep[0]); t.opts = sh;
+    }
+    if (t.extra?.length) t.extra = [];                                              // без лишних букв
+    if (t.items && t.target != null) {                                              // меньше пузырей и рыбок
+      const isT = x => String(x).toUpperCase() === String(t.target).toUpperCase();
+      t.items = shuffle(r, [...t.items.filter(isT), ...t.items.filter(x => !isT(x)).slice(0, 3)]);
+    }
+    if (t.m === 'pairs' || t.m === 'memory') t.pairs = t.pairs.slice(0, Math.max(2, t.pairs.length - 1));
+  } else {
+    if (t.items && t.target != null && t.items.length < 12) t.items = shuffle(r, [...t.items, ...t.items.filter(x => String(x).toUpperCase() !== String(t.target).toUpperCase()).slice(0, 3)]);
+    if (t.extra && t.m === 'build' && !t.wide && t.extra.length && t.extra.length < 4) t.extra = [...t.extra, ...sample(r, ORDER.split('').filter(x => !t.target.includes(x) && !t.extra.includes(x)), 1)];
+  }
+  t.adjusted = level;
+  return t;
+}
+
 // Построить задание по рецепту.
 export function makeTask(src, r) {
   const g = G[src[0]];
@@ -646,7 +734,7 @@ export function buildSession(level, weak, r) {
 // ---------- проверка задания на целостность (для автоматических проверок) ----------
 export const MECHANICS = ['bubbles', 'fish', 'find', 'pick', 'listen', 'memory', 'pairs', 'baskets', 'build', 'missing', 'claps',
   'truefalse', 'story', 'trace', 'copy', 'draw', 'drawtask', 'count', 'feed', 'train', 'compare', 'house', 'numline', 'keypad',
-  'tenframe', 'shop', 'problem', 'dots', 'stones', 'paint', 'chart', 'groups', 'array', 'share'];
+  'tenframe', 'shop', 'problem', 'dots', 'stones', 'paint', 'chart', 'groups', 'array', 'share', 'clock', 'readaloud'];
 
 export function checkTask(t) {
   const bad = why => { throw new Error(`${JSON.stringify(t.src)}: ${why}`); };
@@ -662,7 +750,7 @@ export function checkTask(t) {
     }
     case 'pick': case 'listen': case 'story': case 'missing': case 'house': case 'count': optsOk(); break;
     case 'memory': case 'pairs': {
-      if (t.pairs.length < 3) bad('мало пар');
+      if (t.pairs.length < 2) bad('мало пар');
       const k = x => (typeof x === 'object' ? x.t : x), all = t.pairs.flat().map(k);
       if (new Set(all).size !== all.length) bad('повторы в парах'); break;
     }
@@ -684,6 +772,8 @@ export function checkTask(t) {
     case 'stones': t.steps.forEach((s, i) => { if (+s.opts[s.a] !== t.seq[i]) bad('камушки'); }); break;
     case 'chart': if (t.target < t.lo || t.target > t.hi) bad('число вне таблицы'); break;
     case 'groups': if (t.ask === 'equal') { if (t.a !== t.counts.every(c => c === t.counts[0])) bad('поровну?'); } else optsOk(); break;
+    case 'clock': optsOk(); break;
+    case 'readaloud': if (!t.text || !t.sample) bad('нечего читать'); break;
     case 'share': num(t.k, 2); num(t.q, 1); if (t.k * t.q > 24) bad('слишком много предметов'); break;
     case 'array': num(t.rows, 1); num(t.cols, 1); if (t.rows > 5 || t.cols > 6) bad('не влезет'); break;
   }

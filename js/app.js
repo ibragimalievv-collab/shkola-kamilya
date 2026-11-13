@@ -1,9 +1,13 @@
 // ГЛАВНЫЙ ФАЙЛ ДЕТСКОЙ ЧАСТИ: экраны и переходы между ними.
 // Приветствие → раскраска помощника → карта островов → остров → уровень → награда.
 
-import { h, makeRng, pl } from './util.js';
+import { h, makeRng, today } from './util.js';
+import { idb } from './db.js';
+import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
+import { GIFT_COLORS, STORIES } from './stories.js';
+import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
-import { buildSession, makeTask, tokW } from './tasks.js';
+import { buildSession, makeTask, adjust, tokW } from './tasks.js';
 import { createStore } from './store.js';
 import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames } from './audio.js';
 import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL } from './phrases.js';
@@ -17,14 +21,13 @@ const store = createStore(localStorage);
 const app = document.getElementById('app');
 setVoiceConfig(store.settings);
 
-let streak = 0;     // сколько уровней пройдено подряд без отдыха
 let greeted = false;
 
 // ---------- общие помощники экрана ----------
 function screen(cls, ...kids) {
   hush();
   app.className = 'screen ' + cls;
-  app.replaceChildren(...kids);
+  app.replaceChildren(...kids.flat().filter(k => k != null && k !== false)); // пустые места пропускаем
   app.scrollTop = 0;
 }
 const hero = (mood = 'ok', cls = '') => h('div', { class: 'hero-box ' + cls, html: heroSVG(store.profile.hero, mood) });
@@ -43,18 +46,38 @@ function pickNew(list, kind) {
   return list[i];
 }
 const praise = () => pickNew(named() ? [...PRAISE, ...PRAISE_NAME(store.profile.name)] : PRAISE, 'praise');
+// Общий набор для экранов из файла fun.js.
+const X = { store, app, screen, hero, ibtn, say, map };
+// Сохранить запись чтения вслух (только на устройстве; храним последние 60).
+async function saveRead(blob, text) {
+  const id = 'rd-' + Date.now();
+  try { await idb.put('reads', id, blob); } catch { return; }
+  const list = store.part('reads', []);
+  list.push({ id, t: text, d: today() });
+  while (list.length > 60) idb.del('reads', list.shift().id).catch(() => {});
+  store.save();
+}
+// С чего начать: раскрасить помощника → нарисовать своего героя → игра-разведка (только для новичка) → карта.
+function start() {
+  const p = store.profile;
+  if (!p.heroDone) return paintHero(start);
+  if (!p.pet && !p.petSkipped) return drawPet(X, () => { p.petSkipped = true; store.save(); start(); });
+  if (!p.placed && !Object.keys(p.levels).length) return placement(X, start);
+  map();
+}
 
 // ---------- приветствие ----------
 function welcome() {
   screen('welcome',
     h('h1', { class: 'logo' }, 'Школа ', h('span', {}, store.profile.name === 'Камиль' ? 'Камиля' : '· ' + store.profile.name)),
     hero('happy', 'big bounce'),
-    ibtn('▶', 'начать', () => (store.profile.heroDone ? map() : paintHero()), 'play huge'));
+    ibtn('▶', 'начать', start, 'play huge'));
 }
 
 // ---------- раскрась своего помощника ----------
 function paintHero(back) {
   let color = PALETTE[0];
+  void GIFT_COLORS;
   const box = hero('happy', 'big');
   const redraw = () => { box.innerHTML = heroSVG(store.profile.hero, 'happy'); };
   box.addEventListener('click', e => {
@@ -64,7 +87,8 @@ function paintHero(back) {
     sfx('pop');
     redraw();
   });
-  const pal = h('div', { class: 'palette' }, PALETTE.map((c, i) => h('button', { class: 'color' + (i ? '' : ' sel'), style: `background:${c}`, 'aria-label': 'цвет', onclick: e => {
+  const colors = [...PALETTE, ...store.part('gifts', { colors: [], badges: [], last: 0 }).colors]; // плюс краски-сюрпризы
+  const pal = h('div', { class: 'palette' }, colors.map((c, i) => h('button', { class: 'color' + (i ? '' : ' sel'), style: `background:${c}`, 'aria-label': 'цвет', onclick: e => {
     color = c; sfx('tap'); pal.querySelectorAll('.color').forEach(x => x.classList.toggle('sel', x === e.currentTarget));
   } })));
   const text = P.paint;
@@ -75,7 +99,8 @@ function paintHero(back) {
 
 // ---------- карта островов ----------
 function map() {
-  const next = store.nextLevel();
+  const next = store.dayDone() ? store.nextLevel() : store.nextForToday();
+  const days = store.streak(), fresh = homeNew(store);
   const cards = ISLANDS.map(isl => {
     const open = store.islandOpen(isl), done = store.islandDone(isl);
     const got = isl.levels.filter(l => store.stars(l.id)).length;
@@ -85,19 +110,23 @@ function map() {
       h('span', { html: islandSVG(isl.line, !open) }),
       done ? h('span', { class: 'isticker', html: animalSVG(isl.n) }) : !open ? h('span', { class: 'lock' }, '🔒') : null,
       next && next.island === isl.n ? h('span', { class: 'boat', html: heroSVG(store.profile.hero, 'happy') }) : null,
+      next && next.island === isl.n ? petImg(store, 'pet onmap') : null,
       h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` })));
   });
-  const hi = named() ? P.hi(store.profile.name) : P.hiNoName;
+  const hi = (named() ? P.hi(store.profile.name) : P.hiNoName) + (days >= 2 ? ' ' + P.streak(days) : '');
   if (next) { loadPack(ISLANDS[next.island].id); const after = ISLANDS[next.island + 1]; if (after) loadPack(after.id); } // подгружаем голос для ближайших островов
   const pens = penCount(store);
   screen('map',
     h('div', { class: 'bar' },
       h('button', { class: 'hero-btn', 'aria-label': 'помощник', onclick: () => say(hi) }, hero('ok')),
       h('span', { class: 'score' }, h('span', { html: starSVG(true) }), totalStars()),
+      days ? h('button', { class: 'score chain', 'aria-label': 'дней подряд', onclick: () => say(P.streak(days)) }, '🔥', days) : null,
       h('span', { class: 'grow' }),
+      ibtn('📚', 'книжки', () => library(X, map), booksOpen(store) > Object.keys(store.part('books', {})).length ? 'badge' : ''),
+      ibtn('🏠', 'домик', () => homeScreen(X, map), fresh ? 'badge' : ''),
       ibtn('✍️', 'пишу ручкой', () => penScreen({ store, app, back: map, hero }), pens ? 'badge' : ''),
       ibtn('🏆', 'мои наклейки и рисунки', collection),
-      ibtn('🔒', 'для родителей', () => openParent({ store, app, back: map, repaint: () => paintHero(map) }), 'small')),
+      ibtn('🔒', 'для родителей', () => openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }), 'small')),
     h('div', { class: 'sea' }, cards),
     next ? ibtn('▶', 'играть дальше', () => playLevel(next), 'play float') : null);
   app.querySelector('.island.here')?.scrollIntoView({ block: 'center' });
@@ -115,7 +144,9 @@ function island(isl) {
   screen('island-view', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }),
     ibtn('🔊', 'название острова', () => say(isl.title))),
   h('div', { class: 'ihead', style: `--col:${LINE_COLOR[isl.line]}` }, h('span', { html: islandSVG(isl.line) }), h('span', { class: 'isticker big' + (store.islandDone(isl) ? '' : ' ghost'), html: animalSVG(isl.n) })),
-  h('div', { class: 'path' }, nodes));
+  storyStrip(X, isl),
+  h('div', { class: 'path' }, nodes),
+  store.islandDone(isl) && !store.part('shown', {})[isl.id] ? ibtn('👨‍👩‍👦', 'покажи папе', () => showDad(X, isl, () => island(isl)), 'play') : null);
   say(isl.title);
 }
 
@@ -128,6 +159,7 @@ function playLevel(level) {
   const queue = buildSession(level, store.weakList(), r);
   prepare([level.intro, ...queue.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...queue.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
   let solved = 0, misses = 0, t0 = Date.now(), alive = true;
+  let ease = 0, okRow = 0, failRow = 0; // подстройка сложности: -1 проще, 0 как есть, +1 труднее
   const leave = () => { alive = false; store.addTime((Date.now() - t0) / 1000); island(isl); };
 
   // Объяснение перед заданиями.
@@ -145,6 +177,7 @@ function playLevel(level) {
   }
 
   function run(t) {
+    if (!t.adjusted && ease) adjust(t, ease, r);
     let m = 0, ended = false, prompt = t.say, mech = null;
     const root = h('div'), buddy = hero('ok', 'mini');
     const mood = x => { buddy.innerHTML = heroSVG(store.profile.hero, x); };
@@ -153,6 +186,8 @@ function playLevel(level) {
       prompt(x) { prompt = x; say(x); },
       later: (fn, ms) => setTimeout(fn, ms),
       saveArt: url => store.addArt(url),
+      saveRead, myPic: store.profile.pet?.img || null,
+      saveWord: (u, text) => { const w = store.part('words', []); w.unshift({ u, t: text }); w.length = Math.min(w.length, 12); store.save(); },
       ok(delay = 1100) {
         if (ended) return;
         ended = c.locked = true;
@@ -160,6 +195,8 @@ function playLevel(level) {
         // Хвалим голосом не каждый раз, а примерно через раз — и только за ответ без ошибок.
         if (m === 0 && delay === 1100 && (solved + misses) % 2 === 0) { say(praise()); delay = 2000; }
         if (m === 0 && (t.fromWeak || t.retry)) store.fixWeak(t.src);
+        // Серия верных ответов с первой попытки — можно чуть труднее; после упрощения возвращаемся к обычному.
+        if (m === 0) { okRow++; failRow = 0; if (ease < 0 && okRow >= 3) ease = 0; else if (ease === 0 && okRow >= 5) ease = 1; } else { okRow = 0; if (ease > 0) ease = 0; }
         solved++;
         setTimeout(next, delay);
       },
@@ -172,6 +209,7 @@ function playLevel(level) {
         mech.reveal();
         say(pickNew(REVEAL, 'reveal'));
         store.addWeak(t.src);
+        okRow = 0; if (++failRow >= 1 || ease > 0) ease = Math.max(-1, ease - 1); // не получилось — дальше задания попроще
         if (!t.retry) { const again = makeTask(t.src, r); again.retry = true; queue.push(again); }
         setTimeout(next, 3200);
       },
@@ -187,29 +225,36 @@ function playLevel(level) {
     if (level.demo) return map();
     const stars = misses <= 1 ? 3 : misses <= 4 ? 2 : 1;
     store.addTime((Date.now() - t0) / 1000);
+    const first = !store.stars(level.id);
     const res = store.finishLevel(level, stars);
-    streak++;
-    reward(level, stars, res.sticker);
+    reward(level, stars, res.sticker, first);
   }
 }
 
 // ---------- награда ----------
-function reward(level, stars, sticker) {
-  const isl = ISLANDS[level.island], nxt = store.nextLevel();
+function reward(level, stars, sticker, first) {
+  const isl = ISLANDS[level.island];
   const words = stars === 3 ? P.stars3 : stars === 2 ? P.stars2 : P.stars1;
-  const go = () => (streak >= 3 ? rest('break', nxt) : nxt ? playLevel(nxt) : map());
+  const story = first ? storyCard(X, level) : null, gift = sticker ? null : surprise(X);
+  const justDone = store.dayDone() && store.todayIds().length === 3; // только что закончен «короткий день»
+  const nxt = store.dayDone() ? store.nextLevel() : store.nextForToday();
+  const onward = () => (justDone ? dayDone(X) : nxt ? playLevel(nxt) : map());
+  const go = () => (sticker && !store.part('shown', {})[isl.id] ? showDad(X, isl, onward) : onward());
   screen('reward', h('div', { class: 'confetti' }, Array.from({ length: 24 }, (_, i) => h('i', { style: `--x:${(i * 37) % 100}%;--c:${PALETTE[i % 9]};--t:${1.6 + (i % 5) * 0.3}s;--dl:${(i % 7) * 0.12}s` }))),
     h('div', { class: 'stars huge', html: [1, 2, 3].map(i => starSVG(i <= stars)).join('') }),
     hero('happy', 'big bounce'),
     sticker ? h('div', { class: 'new-sticker' }, h('span', { html: animalSVG(isl.n) }), h('b', {}, isl.sticker)) : null,
-    h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map), nxt ? ibtn('▶', 'дальше', go, 'play') : null));
+    story, gift?.el,
+    h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map), ibtn('▶', 'дальше', go, 'play')));
   sfx(sticker ? 'island' : 'star');
-  say(words + (sticker ? ' ' + P.sticker(isl.sticker) : ''));
+  say(words + (sticker ? ' ' + P.sticker(isl.sticker) : '') + (story ? ' ' + STORY_LINE(level) : '') + (gift ? ' ' + gift.text : ''));
 }
+
+// Реплика истории, которая открылась после уровня.
+const STORY_LINE = level => STORIES[ISLANDS[level.island].id]?.[1][level.k]?.[1] || '';
 
 // ---------- отдых ----------
 function rest(kind, nxt) {
-  streak = 0;
   const text = kind === 'limit' ? P.restLimit : P.restBreak;
   screen('rest', hero('sleep', 'big'), h('div', { class: 'zzz' }, '💤'),
     h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map, 'play'), kind === 'break' && nxt ? ibtn('▶', 'ещё один уровень', () => playLevel(nxt), 'small') : null));
@@ -224,6 +269,7 @@ function collection() {
       const has = store.islandDone(isl);
       return h('button', { class: 'sticker' + (has ? '' : ' ghost'), 'aria-label': isl.sticker, onclick: () => say(has ? isl.sticker : P.stickerWait(isl.n + 1)) }, h('span', { html: animalSVG(isl.n) }));
     })),
+    h('div', { class: 'badges' }, store.part('gifts', { colors: [], badges: [], last: 0 }).badges.map(b => h('span', {}, b))),
     store.profile.gallery.length ? h('div', { class: 'gallery' }, store.profile.gallery.map(u => h('img', { src: u, alt: 'мой рисунок' }))) : null);
   say(got ? P.stickersHave(got) : P.stickersNone);
 }
@@ -270,9 +316,19 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:' && !localDev) 
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
 }
 // Для отладки: показать любые задания по рецептам, не трогая прогресс.
+window.__fun = { reward: id => { const L = LEVELS.find(l => l.id === id); reward(L, 3, store.finishLevel(L, 3).sticker, true); }, placement: () => placement(X, map), showDad: id => showDad(X, ISLANDS.find(i => i.id === id), map), dayDone: () => dayDone(X) };
 window.__play = srcs => playLevel({ id: 'demo', island: 0, k: 0, intro: '', tasks: srcs, demo: true });
 loadClips();
 initVoice();
+// Напоминание о занятии: пока приложение открыто или свёрнуто, раз в минуту смотрим на часы.
+let reminded = '';
+setInterval(() => {
+  if (!reminderDue(store, reminded)) return;
+  reminded = today();
+  const text = 'Пора позаниматься! Лумик ждёт.';
+  if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification('Школа Камиля', { body: text, icon: 'icons/icon-192.png' })).catch(() => {});
+  else if (app.classList.contains('map') || app.classList.contains('welcome')) { const b = h('button', { class: 'toast', onclick: () => b.remove() }, '⏰ ' + text); document.body.append(b); setTimeout(() => b.remove(), 15000); }
+}, 60000);
 const params = new URLSearchParams(location.search);
 if (params.has('selftest')) selftest();
 else if (params.has('glyphs')) { // для отладки: все образцы письменных букв на одном листе

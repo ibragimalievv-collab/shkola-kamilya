@@ -8,6 +8,7 @@ import { MAIL } from '../app/js/mail.js';
 import { bareWord } from '../app/js/books.js';
 import { stageOf, ORDER } from '../app/js/data.js';
 import { toyPrice } from '../app/js/extra.js';
+import { contours } from '../app/js/photo.js';
 
 test('слияние: для каждого слога верный ответ — этот слог, и он один', () => {
   const r = makeRng(5);
@@ -72,4 +73,17 @@ test('письма от Лумика: не меньше 12, от простых 
       for (const w of line.split(' ')) assert.ok(bareWord(w).length > 0 || /^[—–-]$/.test(w), `странное слово «${w}»`);
     }
   }
+});
+
+test('раскраска из фото: линии только на границах, ровные места остаются чистыми', () => {
+  const w = 120, h = 90, gray = new Uint8Array(w * h).fill(230);
+  for (let y = 25; y < 65; y++) for (let x = 35; x < 85; x++) gray[y * w + x] = 60; // тёмный прямоугольник на светлом фоне
+  const a = contours(gray, w, h), at = (x, y) => a[y * w + x];
+  assert.ok(at(35, 45) > 200 && at(85, 45) > 200 && at(60, 25) > 200 && at(60, 65) > 200, 'границы прямоугольника — линии');
+  assert.equal(at(60, 45), 0, 'середина прямоугольника чистая');
+  assert.equal(at(8, 8), 0, 'фон чистый');
+  const lines = a.filter(v => v > 128).length / a.length;
+  assert.ok(lines > 0.01 && lines < 0.3, `линий ${Math.round(lines * 100)}% — раскраску можно раскрашивать`);
+  // совсем ровная картинка — пустой лист, без мусора
+  assert.ok(contours(new Uint8Array(w * h).fill(128), w, h).every(v => v === 0));
 });

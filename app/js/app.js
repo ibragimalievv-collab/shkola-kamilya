@@ -5,6 +5,7 @@ import { h, makeRng, today } from './util.js';
 import { idb } from './db.js';
 import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { GIFT_COLORS, STORIES } from './stories.js';
+import { photoScreen } from './photo.js';
 import { shopScreen, shopOpen, mailScreen, mailWaiting, duoScreen } from './extra.js';
 import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
@@ -136,7 +137,8 @@ function map() {
     h('div', { class: 'bar places' },
       ibtn('✉️', 'письма от Лумика', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
       ibtn('🛒', 'магазин игрушек', () => shopScreen(X, map), shopOpen(store) ? '' : 'dim'),
-      ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map))),
+      ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map)),
+      ibtn('📷', 'раскрась фото', () => photoScreen(X, map))),
     h('div', { class: 'sea' }, cards),
     next ? ibtn('▶', 'играть дальше', () => playLevel(next), 'play float') : null);
   app.querySelector('.island.here')?.scrollIntoView({ block: 'center' });

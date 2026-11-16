@@ -226,6 +226,11 @@ function sylWrongs(r, syl, s) {
   const near = all.filter(x => x[0] === syl[0] || x[1] === syl[1]);
   return uniq([...shuffle(r, near), ...shuffle(r, all), syl[1] + syl[0]]);
 }
+// Слияние: ребёнок нажимает две буквы, слышит, как звуки сливаются в слог, и находит этот слог глазами.
+def('blend', 'R', slab, (r, syl, s) => ({
+  m: 'blend', say: 'Нажми на первую букву, потом на вторую — и послушай, как они сливаются. Потом найди этот слог.', syl, key: 'bl' + syl,
+  parts: [tokL(syl[0]), tokL(syl[1])], whole: `${tokL(syl[0])} ${tokL(syl[1])} ${tokS(syl)}`, ...mk(r, syl, sylWrongs(r, syl, s || 5)),
+}));
 def('listenS', 'R', slab, (r, syl, s) => ({ m: 'listen', say: `Найди слог ${tokS(syl)}.`, key: 'lS' + syl, ...mk(r, syl, sylWrongs(r, syl, s)) }));
 def('bubS', 'R', slab, (r, syl, s) => ({ m: 'bubbles', say: `Лопни все пузыри, где слог ${tokS(syl)}.`, target: syl, key: 'bubS' + syl, items: mix(r, syl, sylWrongs(r, syl, s).slice(0, 4), 9, 3) }));
 
@@ -364,6 +369,18 @@ def('dictW', 'W', 'письмо слов по буквам', (r, s, f) => {
   const w = wordFor(r, s, f, 7) || wordFor(r, s, 'any', 7);
   const up = w.w.toUpperCase();
   return { m: 'build', say: `Набери буквами слово: ${tokW(w.w)}.`, pic: w.e, target: up.split(''), key: 'dc' + w.w, extra: sample(r, known(Math.max(s, 8)).filter(x => !up.includes(x)), 4) };
+});
+// Диктант на слух: картинки-подсказки нет, слово можно только услышать.
+def('hearW', 'W', 'диктант на слух', (r, s, f) => {
+  const w = wordFor(r, s, f, 6) || wordFor(r, s, 'any', 7);
+  const up = w.w.toUpperCase();
+  return { m: 'build', say: `Диктант. Послушай и набери буквами слово: ${tokW(w.w)}.`, hear: true, target: up.split(''), key: 'hw' + w.w, extra: sample(r, known(Math.max(s, 8)).filter(x => !up.includes(x)), 4) };
+});
+// Свои слова семьи (их вписывают родители): найти слово среди других или набрать его на слух.
+def('famW', 'R', 'свои слова', (r, word, mode, others = []) => {
+  const up = word.toUpperCase();
+  if (mode === 'pick') return { m: 'listen', say: `Найди слово: ${tokW(word)}.`, key: 'fp' + word, ...mk(r, up, shuffle(r, [...others.map(x => x.toUpperCase()), ...sample(r, WORDS.filter(x => Math.abs(x.w.length - up.length) <= 2), 6).map(x => x.w.toUpperCase())])) };
+  return { m: 'build', say: `Набери буквами слово: ${tokW(word)}.`, hear: true, target: up.split(''), key: 'fb' + word, extra: sample(r, ORDER.split('').filter(x => !up.includes(x)), 3) };
 });
 def('dictT', 'W', 'письмо слов по буквам', (r, word) => {
   const up = word.toUpperCase();
@@ -661,6 +678,14 @@ def('coinSum', 'M', 'счёт монетками', (r, n) => {
   const coins = Array.from({ length: n }, () => pickR(r, [1, 2, 5, 10])).sort((a, b) => b - a), sum = coins.reduce((a, b) => a + b, 0);
   return { m: 'keypad', say: 'Сколько всего рублей? Сложи все монетки и набери ответ.', text: coins.map(c => `${c} ₽`).join(' + ') + ' =', a: sum, key: 'cs' + coins.join('') };
 });
+// Магазин на карте: цена и игрушка заданы заранее.
+def('shopBuy', 'M', 'счёт монетками', (r, price, item) => ({
+  m: 'shop', say: `Цена игрушки — ${price} ${pl(price, ['рубль', 'рубля', 'рублей'])}. Положи на тарелку ровно столько монеток и нажми галочку.`, price, item,
+  coins: price <= 10 ? [1, 2, 5] : price <= 20 ? [1, 2, 5, 10] : [1, 2, 5, 10, 50], key: 'sb' + price,
+}));
+def('changeBuy', 'M', 'счёт монетками', (r, price, have) => ({
+  m: 'keypad', say: `Цена игрушки — ${price} ${pl(price, ['рубль', 'рубля', 'рублей'])}. У тебя ${have} рублей. Сколько сдачи тебе дадут?`, text: `${have} − ${price} =`, a: have - price, key: 'cb' + have + price,
+}));
 def('change', 'M', 'счёт монетками', (r, max) => {
   const have = pickR(r, [10, 10, 20].filter(x => x <= max)), price = rint(r, 2, have - 1);
   return { m: 'keypad', say: `Цена игрушки — ${price} ${pl(price, ['рубль', 'рубля', 'рублей'])}. У тебя ${have} рублей. Сколько сдачи тебе дадут?`, text: `${have} − ${price} =`, a: have - price, key: 'chg' + have + price };
@@ -753,7 +778,7 @@ export function buildSession(level, weak, r) {
 // ---------- проверка задания на целостность (для автоматических проверок) ----------
 export const MECHANICS = ['bubbles', 'fish', 'find', 'pick', 'listen', 'memory', 'pairs', 'baskets', 'build', 'missing', 'claps',
   'truefalse', 'story', 'trace', 'copy', 'draw', 'drawtask', 'count', 'feed', 'train', 'compare', 'house', 'numline', 'keypad',
-  'tenframe', 'shop', 'problem', 'dots', 'stones', 'paint', 'chart', 'groups', 'array', 'share', 'clock', 'readaloud'];
+  'tenframe', 'shop', 'problem', 'dots', 'stones', 'paint', 'chart', 'groups', 'array', 'share', 'clock', 'readaloud', 'blend'];
 
 export function checkTask(t) {
   const bad = why => { throw new Error(`${JSON.stringify(t.src)}: ${why}`); };
@@ -768,6 +793,7 @@ export function checkTask(t) {
       if (n < 1 || n === t.items.length) bad('нет нужных или нет лишних'); break;
     }
     case 'pick': case 'listen': case 'story': case 'missing': case 'house': case 'count': optsOk(); break;
+    case 'blend': optsOk(); if (t.syl.length !== 2 || t.opts[t.a] !== t.syl) bad('слог не сходится'); break;
     case 'memory': case 'pairs': {
       if (t.pairs.length < 2) bad('мало пар');
       const k = x => (typeof x === 'object' ? x.t : x), all = t.pairs.flat().map(k);

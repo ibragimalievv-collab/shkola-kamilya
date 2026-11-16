@@ -5,6 +5,7 @@ import { h, makeRng, today } from './util.js';
 import { idb } from './db.js';
 import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { GIFT_COLORS, STORIES } from './stories.js';
+import { shopScreen, shopOpen, mailScreen, mailWaiting, duoScreen } from './extra.js';
 import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { buildSession, makeTask, adjust, tokW } from './tasks.js';
@@ -132,6 +133,10 @@ function map() {
       ibtn('✍️', 'пишу ручкой', () => penScreen({ store, app, back: map, hero }), pens ? 'badge' : ''),
       ibtn('🏆', 'мои наклейки и рисунки', collection),
       ibtn('🔒', 'для родителей', () => openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }), 'small')),
+    h('div', { class: 'bar places' },
+      ibtn('✉️', 'письма от Лумика', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
+      ibtn('🛒', 'магазин игрушек', () => shopScreen(X, map), shopOpen(store) ? '' : 'dim'),
+      ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map))),
     h('div', { class: 'sea' }, cards),
     next ? ibtn('▶', 'играть дальше', () => playLevel(next), 'play float') : null);
   app.querySelector('.island.here')?.scrollIntoView({ block: 'center' });
@@ -162,6 +167,11 @@ function playLevel(level) {
   loadPack(isl.id);
   const r = makeRng(Date.now() % 2147483647);
   const queue = buildSession(level, store.weakList(), r);
+  const fam = store.part('family', []);
+  if (fam.length && 'RW'.includes(isl.line) && !level.demo && Math.random() < 0.6) { // своё слово семьи — не чаще одного на уровень
+    const word = fam[Math.floor(Math.random() * fam.length)];
+    queue.splice(Math.min(2, queue.length), 0, makeTask(['famW', word, Math.random() < 0.5 ? 'pick' : 'build', fam.filter(w => w !== word).slice(0, 3)], r));
+  }
   prepare([level.intro, ...queue.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...queue.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
   let solved = 0, misses = 0, t0 = Date.now(), alive = true;
   let ease = 0, okRow = 0, failRow = 0; // подстройка сложности: -1 проще, 0 как есть, +1 труднее

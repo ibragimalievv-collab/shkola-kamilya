@@ -435,3 +435,29 @@ svg { display: block; width: 100%; height: 100%; }
 .rv-pic { font-size: 44px; min-width: 64px; text-align: center; line-height: 1.1; } .rv-pic.svg { width: 64px; height: 60px; }
 .rv-name { flex: 1; min-width: 140px; font-size: 18px; } .rv-mark { margin: 0 !important; white-space: nowrap; }
 .rv-row input[type=text] { flex-basis: 100%; }
+
+/* ---------- слияние букв в слог ---------- */
+.bl-pair { display: flex; align-items: center; justify-content: center; gap: 6vmin; transition: gap .8s ease; margin: 2vmin 0; }
+.bl-pair .tile.bl { min-width: clamp(90px, 24vmin, 180px); height: clamp(90px, 24vmin, 180px); font-size: min(15vmin, 110px); }
+.bl-pair .tile.bl.lit { background: #b7f0a1; box-shadow: 0 .8vmin 0 var(--ok); }
+.bl-plus { font-size: min(10vmin, 70px); color: #868e96; transition: opacity .4s, width .8s; width: 8vmin; text-align: center; }
+.bl-pair.joined { gap: 0; } .bl-pair.joined .bl-plus { opacity: 0; width: 0; }
+.bl-pair.joined .tile.bl { background: #b7f0a1; box-shadow: 0 .8vmin 0 var(--ok); border-radius: 0; }
+.bl-pair.joined .tile.bl:first-child { border-radius: 3vmin 0 0 3vmin; } .bl-pair.joined .tile.bl:last-child { border-radius: 0 3vmin 3vmin 0; }
+.bigspeak.small { width: 20vmin; height: 20vmin; max-width: 130px; max-height: 130px; font-size: min(10vmin, 70px); margin: 0 auto 2vmin; display: block; }
+
+/* ---------- места на карте: письма, магазин, игра вдвоём ---------- */
+.bar.places { justify-content: center; gap: 3vmin; margin: 1vmin 0; }
+.ibtn.dim { opacity: .55; }
+.book.toy b { font-size: 1.15em; } .book.letter.new { background: #fff9db; animation: pulse 1.6s infinite; }
+.page.paper { background: #fffdf5; border-radius: 3vmin; padding: 3vmin; box-shadow: 0 .8vmin 0 #e9dcc0; width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 2vmin; }
+.paper-top { display: flex; justify-content: space-between; align-items: center; }
+.stamp { font-size: clamp(34px, 9vmin, 64px); border: .5vmin dashed #ffa94d; border-radius: 1.5vmin; padding: .5vmin 1.5vmin; background: #fff; transform: rotate(6deg); }
+.letter-line { font-size: clamp(24px, 6.2vmin, 50px); justify-content: flex-start; }
+.who { font-size: clamp(30px, 7vmin, 52px); } .score.duo { white-space: nowrap; }
+.duo-final { display: flex; gap: 4vmin; align-items: center; font-size: clamp(34px, 9vmin, 70px); font-weight: 800; }
+.duo-final svg { width: 12vmin; height: 12vmin; }
+.opts.judge { margin-top: 2vmin; } .opts.judge:empty { display: none; }
+/* пока ребёнок не оценил ответ взрослого, верно или нет — не видно */
+.veil .opt.right, .veil .opt.wrong, .veil .ncell.right, .veil .ccell.right, .veil .ccell.wrong { background: #fff3bf; box-shadow: 0 .8vmin 0 #f59f00; opacity: 1; }
+.fam-row { display: flex; align-items: center; gap: 8px; } .pinput { font: inherit; padding: 8px 10px; border: 2px solid #ced4da; border-radius: 10px; min-width: 0; flex: 1; }

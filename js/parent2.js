@@ -1,5 +1,6 @@
 // РОДИТЕЛЯМ, ЧАСТЬ ВТОРАЯ: недельная сводка, записи чтения вслух, напоминание, альбом ребёнка, проверка на входе.
 
+import { clipCell } from './voice.js';
 import { h, today, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { LINES, lineOf, labelOf } from './tasks.js';
@@ -80,7 +81,22 @@ export function parentExtras(ctx) {
   const check = card('Проверка картинок и слов',
     h('p', {}, 'Все предметы, наклейки, книжки и истории подряд: картинка, название, кнопка «послушать». Отметьте то, что не нравится, и перешлите список.'),
     btn('Открыть страницу проверки', () => reviewScreen({ app: ctx.app, back: again }), 'on'));
-  return [check, summary, reading, remind, tools];
+  // --- свои слова семьи ---
+  const fam = store.part('family', []), field = h('input', { type: 'text', maxlength: 9, placeholder: 'например: Амина', class: 'pinput' });
+  const addWord = () => {
+    const w = field.value.trim();
+    if (!/^[А-Яа-яЁё]{2,9}$/.test(w)) return alert('Слово — от двух до девяти русских букв, без пробелов и чёрточек.');
+    if (fam.some(q => q.toLowerCase() === w.toLowerCase())) return alert('Это слово уже есть в списке.');
+    if (fam.length >= 12) return alert('В списке может быть до двенадцати слов.');
+    fam.push(w); store.save(); again();
+  };
+  const family = card('Свои слова семьи',
+    h('p', {}, 'Имена близких, кличка кота, название вашего города. Эти слова будут иногда появляться в заданиях на чтение и письмо: найти слово среди других или набрать его на слух.'),
+    h('div', { class: 'prow' }, field, btn('Добавить', addWord, 'on')),
+    fam.length ? h('div', { class: 'clip-grid' }, fam.map(w => h('div', { class: 'fam-row' }, clipCell('ш:' + w.toLowerCase(), w),
+      h('button', { class: 'pbtn mini warn', 'aria-label': 'убрать слово', onclick: () => { if (confirm(`Убрать слово «${w}» из списка?`)) { fam.splice(fam.indexOf(w), 1); store.save(); again(); } } }, 'убрать')))) : null,
+    h('p', { class: 'hint' }, 'Обязательно запишите каждое слово своим голосом: нажмите на слово, произнесите его и нажмите ещё раз. Без записи слово прочитает встроенный голос устройства — другим голосом и, возможно, с неверным ударением.'));
+  return [check, summary, family, reading, remind, tools];
 }
 
 // Альбом для печати: рисунки и первые написанные слова.

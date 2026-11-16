@@ -8,7 +8,7 @@ import { MAIL } from '../app/js/mail.js';
 import { bareWord } from '../app/js/books.js';
 import { stageOf, ORDER } from '../app/js/data.js';
 import { toyPrice } from '../app/js/extra.js';
-import { lineMask, floodFill } from '../app/js/photo.js';
+import { lineMask, floodFill, sketch } from '../app/js/photo.js';
 
 test('слияние: для каждого слога верный ответ — этот слог, и он один', () => {
   const r = makeRng(5);
@@ -75,30 +75,39 @@ test('письма от Лумика: не меньше 12, от простых 
   }
 });
 
-// Тестовая картинка: светлый фон с шумом, тёмный круг-«голова» и прямоугольник-«одежда».
+// Тестовая картинка: светлый фон с шумом, тёмный круг-«голова» и синий прямоугольник-«одежда».
 function scene(w, h) {
-  const g = new Uint8Array(w * h);
+  const R = new Float32Array(w * h), G = new Float32Array(w * h), B = new Float32Array(w * h);
   let seed = 7; const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5) * 22;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const head = Math.hypot(x - 160, y - 90) < 60, body = x > 100 && x < 220 && y > 160 && y < 230;
-    g[y * w + x] = Math.max(0, Math.min(255, (head ? 90 : body ? 150 : 225) + rnd()));
+    const head = Math.hypot(x - 160, y - 90) < 60, body = x > 100 && x < 220 && y > 160 && y < 230, i = y * w + x, n = rnd();
+    const c = head ? [90, 60, 40] : body ? [50, 90, 200] : [225, 225, 215];
+    R[i] = c[0] + n; G[i] = c[1] + n; B[i] = c[2] + n;
   }
-  return g;
+  return [R, G, B];
 }
-test('раскраска из фото: линии замкнуты, фон и середина фигур чистые, шум не превращается в линии', () => {
-  const w = 320, h = 240, g = scene(w, h);
+test('раскраска из фото: области замкнуты, шум не превращается в линии, чем подробнее — тем не меньше линий', () => {
+  const w = 320, h = 240, rgb = scene(w, h);
   for (const level of [0, 1, 2]) {
-    const m = lineMask(g, w, h, level), share = m.reduce((a, b) => a + b, 0) / m.length;
-    assert.ok(share > 0.01 && share < 0.25, `уровень ${level}: линий ${Math.round(share * 100)}%`);
+    const m = lineMask(rgb, w, h, level), share = m.reduce((a, b) => a + b, 0) / m.length;
+    assert.ok(share > 0.003 && share < 0.12, `уровень ${level}: линий ${(share * 100).toFixed(1)}%`);
     assert.equal(m[90 * w + 160], 0, 'середина круга чистая');
     assert.equal(m[10 * w + 10], 0, 'фон чистый');
-    // заливка внутри круга не вытекает наружу, а заливка фона не затекает в круг
-    const inside = floodFill(m, w, h, 160, 90), outside = floodFill(m, w, h, 10, 10);
+    const inside = floodFill(m, w, h, 160, 90), outside = floodFill(m, w, h, 10, 10), shirt = floodFill(m, w, h, 160, 200);
     assert.equal(inside[10 * w + 10], 0, `уровень ${level}: круг замкнут`);
     assert.equal(outside[90 * w + 160], 0, `уровень ${level}: фон не затекает в круг`);
+    assert.equal(shirt[90 * w + 160], 0, `уровень ${level}: одежда отдельно от головы`);
+    assert.equal(shirt[10 * w + 10], 0, `уровень ${level}: одежда отдельно от фона`);
     assert.ok(inside.reduce((a, b) => a + b, 0) > 5000, 'круг заливается целиком');
   }
-  assert.ok(lineMask(new Uint8Array(w * h).fill(128), w, h, 1).every(v => v === 0), 'ровная картинка — пустой лист');
+  const flat = [0, 1, 2].map(() => new Float32Array(w * h).fill(128));
+  assert.ok(lineMask(flat, w, h, 1).every(v => v === 0), 'ровная картинка — пустой лист');
+});
+test('раскраска: граница есть и там, где меняется только цвет, а яркость одинаковая', () => {
+  const w = 200, h = 120, r = new Float32Array(w * h), g = new Float32Array(w * h), b = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) { const left = i % w < 100; r[i] = left ? 200 : 60; g[i] = left ? 60 : 131; b[i] = 60; }
+  const m = lineMask([r, g, b], w, h, 1);
+  assert.equal(floodFill(m, w, h, 20, 60)[60 * w + 180], 0, 'две отдельные области');
 });
 test('заливка: касание по линии закрашивает соседнее место, касание мимо листа ничего не делает', () => {
   const w = 60, h = 40, m = new Uint8Array(w * h);
@@ -111,10 +120,20 @@ test('заливка: касание по линии закрашивает со
 test('заливка не вытекает через небольшой разрыв в линии', () => {
   const w = 200, h = 120, m = new Uint8Array(w * h);
   for (let x = 40; x <= 160; x++) for (const y of [20, 21, 99, 100]) m[y * w + x] = 1;
-  for (let y = 20; y <= 100; y++) for (const x of [40, 41, 159, 160]) if (y < 57 || y > 63) m[y * w + x] = 1; // в боковых стенках — щели по 6 точек
+  for (let y = 20; y <= 100; y++) for (const x of [40, 41, 159, 160]) if (y < 58 || y > 62) m[y * w + x] = 1; // в боковых стенках — щели по 4 точки
   const inside = floodFill(m, w, h, 100, 60), outside = floodFill(m, w, h, 10, 10);
   assert.equal(inside[60 * w + 100], 1);
   assert.equal(inside[10 * w + 10], 0, 'краска не вышла наружу');
   assert.equal(inside[60 * w + 20], 0, 'и рядом со щелью тоже');
   assert.equal(outside[60 * w + 100], 0, 'фон не затёк внутрь');
+});
+
+test('карандашный рисунок: ровное место — чистая бумага, граница — штрих, чем выше уровень — тем темнее', () => {
+  const w = 160, h = 100, g = new Float32Array(w * h).fill(210);
+  for (let y = 30; y < 70; y++) for (let x = 50; x < 110; x++) g[y * w + x] = 70;
+  assert.ok(sketch(new Float32Array(w * h).fill(128), w, h, 1).every(v => v === 0), 'ровная картинка — пустой лист');
+  const [a, b, c] = [0, 1, 2].map(l => sketch(g, w, h, l)), edge = 50 * w + 51, far = 8 * w + 8;
+  assert.ok(b[edge] > 120, 'у границы тёмный штрих');
+  assert.ok(b[far] < 12, 'вдали от границы бумага чистая');
+  assert.ok(a[edge] <= b[edge] && b[edge] <= c[edge], 'уровни идут от светлого к тёмному');
 });

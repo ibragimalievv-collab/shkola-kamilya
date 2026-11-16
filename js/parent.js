@@ -28,6 +28,7 @@ export function openParent(ctx) {
       h('button', { class: 'key back', onclick: () => { v = ''; out.textContent = '?'; } }, '⌫'), h('button', { class: 'key', onclick: () => press(0) }, 0)));
 }
 
+let tabNow = 0; // какой раздел открыт (запоминаем, пока приложение не закрыли)
 function parentScreen(ctx) {
   const { store, app, back, repaint } = ctx;
   const again = () => parentScreen(ctx);
@@ -46,7 +47,7 @@ function parentScreen(ctx) {
     h('p', { class: 'hint' }, 'У каждого ребёнка свой прогресс, свой помощник и свои рисунки.'));
 
   // --- прогресс простыми словами ---
-  const progress = card('Что уже умеет', Object.entries(LINES).map(([k, name]) => {
+  const progress = card('Что уже умеет — по предметам', Object.entries(LINES).map(([k, name]) => {
     const isl = ISLANDS.filter(i => i.line === k), all = isl.flatMap(i => i.levels), done = all.filter(l => p.levels[l.id]).length;
     const finished = isl.filter(i => store.islandDone(i)), now = isl.find(i => !store.islandDone(i));
     return h('div', { class: 'line' }, h('b', {}, `${name}: ${done} из ${all.length}`), h('div', { class: 'progress' }, h('i', { style: `width:${(done / all.length) * 100}%` })),
@@ -56,7 +57,7 @@ function parentScreen(ctx) {
   // --- слабые места ---
   const weakBy = {};
   for (const w of p.weak) { const l = LINES[lineOf(w.s)]; (weakBy[l] ||= new Set()).add(labelOf(w.s)); }
-  const weak = card('Над чем стоит поработать', Object.keys(weakBy).length
+  const weak = card('Где ошибки: над чем стоит поработать', Object.keys(weakBy).length
     ? Object.entries(weakBy).map(([l, set]) => h('p', {}, h('b', {}, l + ': '), [...set].join('; ') + '.'))
     : h('p', {}, 'Сейчас трудных мест нет.'),
   h('p', { class: 'hint' }, 'Приложение само вернёт эти задания в следующих уровнях.'));
@@ -109,8 +110,24 @@ function parentScreen(ctx) {
 
   hush();
   app.className = 'screen parent';
-  app.replaceChildren(h('div', { class: 'bar' }, h('button', { class: 'ibtn', 'aria-label': 'назад', onclick: back }, '🗺️'), h('h1', {}, 'Для родителей')),
-    profiles, ...parentExtras({ store, again, app, placement: ctx.placement }), progress, voiceStudio(), penParent({ store, again, app }), weak, time, settings, islands, data);
+  // Итог одной строкой: что пройдено.
+  const starsAll = Object.values(p.levels).reduce((x, y) => x + y, 0), doneL = Object.keys(p.levels).length, doneI = ISLANDS.filter(i => store.islandDone(i)).length;
+  const tile = (num, label) => h('div', { class: 'ptile' }, h('b', {}, num), h('span', {}, label));
+  const totals = card('Что пройдено', h('div', { class: 'ptiles' },
+    tile(`${doneL} из ${LEVELS.length}`, 'уровней'), tile(`${doneI} из ${ISLANDS.length}`, 'островов и наклеек'), tile(starsAll, 'звёзд'), tile(store.streak(), 'дней подряд'), tile(p.weak.length, 'заданий на повторении')));
+  // Разделы: сверху — закладки, под ними — карточки выбранного раздела.
+  const [check, summary, family, reading, remind, tools] = parentExtras({ store, again, app, placement: ctx.placement });
+  const TABS = [
+    ['📊 Успехи', 'что пройдено и где ошибки', [totals, weak, progress, summary, time]],
+    ['👦 Ребёнок', 'имя, свои слова, тетрадь, записи', [profiles, family, reading, penParent({ store, again, app }), tools]],
+    ['🎙 Голос', 'записи и проверка слов', [voiceStudio(), check]],
+    ['⚙️ Настройки', 'звук, лимит, острова, перенос', [settings, remind, islands, data]],
+  ];
+  const body = h('div', { class: 'ptab-body' });
+  const tabs = h('div', { class: 'ptabs' }, TABS.map(([title, sub, cards], i) => h('button', { class: 'ptab', onclick: () => show(i) }, h('b', {}, title), h('small', {}, sub))));
+  const show = i => { tabNow = i; [...tabs.children].forEach((b, k) => b.classList.toggle('on', k === i)); body.replaceChildren(...TABS[i][2].filter(Boolean)); app.scrollTop = 0; };
+  app.replaceChildren(h('div', { class: 'bar' }, h('button', { class: 'ibtn', 'aria-label': 'назад', onclick: back }, '🗺️'), h('h1', {}, `Для родителей · ${p.name}`)), tabs, body);
+  show(tabNow);
   app.scrollTop = 0;
 }
 

@@ -1,7 +1,7 @@
 // ГЛАВНЫЙ ФАЙЛ ДЕТСКОЙ ЧАСТИ: экраны и переходы между ними.
 // Приветствие → раскраска помощника → карта островов → остров → уровень → награда.
 
-import { h, makeRng, today } from './util.js';
+import { h, makeRng, today, twice } from './util.js';
 import { idb } from './db.js';
 import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { GIFT_COLORS, STORIES } from './stories.js';
@@ -239,7 +239,7 @@ function playLevel(level) {
       },
     };
     const done = solved / (solved + queue.length + 1);
-    screen('level', h('div', { class: 'bar' }, ibtn('🏠', 'выйти', leave), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
+    screen('level', h('div', { class: 'bar' }, twice(ibtn('🏠', 'выйти: нажать два раза', leave), () => say(P.exitTwice)), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
       ibtn('🔊', 'послушать задание', () => say(prompt), 'speak')), root);
     mech = renderTask(t, c);
     say(t.say);

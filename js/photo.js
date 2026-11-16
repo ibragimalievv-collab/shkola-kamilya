@@ -3,14 +3,19 @@
 // есть кисть, ластик и отмена; недокрашенное сохраняется.
 // Уменьшенная фотография, контуры и краска хранятся только на этом устройстве и никуда не отправляются.
 
-import { h, today } from './util.js';
+import { h, today, twice } from './util.js';
 import { idb } from './db.js';
 import { P } from './phrases.js';
 import { sfx } from './audio.js';
+import { animalSVG, heroSVG } from './art.js';
+import { ISLANDS } from './curriculum.js';
 
 const KEEP = 12;   // сколько раскрасок храним
 const SIDE = 720;  // длинная сторона листа в точках
-const COLORS = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#2a9d8f', '#1982c4', '#8ecae6', '#6a4c93', '#f15bb5', '#ffb3c6', '#f6c9a0', '#c68642', '#7b4a23', '#2b2d42', '#adb5bd', '#ffffff'];
+const COLORS = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#2a9d8f', '#1982c4', '#8ecae6', '#6a4c93', '#f15bb5', '#ffb3c6', '#f6c9a0', '#c68642', '#7b4a23', '#2b2d42', '#adb5bd', '#ffffff', 'rainbow'];
+const STAMPS = ['⭐', '❤️', '🌸', '🦋', '👑', '🎩', '🕶️', '🎀', '☀️', '⚽', '🐞', '🎈'];
+// Цвет радуги по числу от 0 до 1.
+const rainbow = t => { const k = n => { const q = (n + t * 10) % 12; return Math.round(255 * (0.55 - 0.45 * Math.max(-1, Math.min(q - 3, 9 - q, 1)))); }; return [k(0), k(8), k(4)]; };
 
 // ================= РАСЧЁТЫ (без экрана — проверяются автоматически) =================
 
@@ -230,6 +235,23 @@ export async function addPage(store, file) {
   store.save();
   return id;
 }
+// Готовая картинка (зверёк-наклейка или помощник) как раскраска. key — её имя, чтобы не заводить вторую такую же.
+export async function addArtPage(store, key, svg) {
+  const list = store.part('colorings', []), old = list.find(it => it.art === key);
+  if (old) return old.id;
+  const text = svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" ');
+  const img = new Image();
+  await new Promise((ok, fail) => { img.onload = ok; img.onerror = fail; img.src = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' })); });
+  const c = canvasOf(SIDE, SIDE), g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, SIDE, SIDE);
+  g.drawImage(img, 40, 40, SIDE - 80, SIDE - 80);
+  const id = 'cl-' + Date.now();
+  await idb.put('photos', id, await toBlob(c));
+  list.unshift({ id, d: today(), v: 2, art: key });
+  while (list.length > KEEP) dropPage(list.pop().id);
+  store.save();
+  return id;
+}
 const dropPage = id => { for (const k of [id, id + '-p', id + '-t']) idb.del('photos', k).catch(() => {}); };
 
 // ================= ЭКРАН: МОИ РАСКРАСКИ =================
@@ -251,6 +273,11 @@ export function photoScreen(x, back, note) {
     shelf.append(btn);
     try { const b = (await idb.get('photos', it.id + '-t')) || (it.v ? null : await idb.get('photos', it.id)); if (b) btn.append(h('img', { src: URL.createObjectURL(b), alt: '' })); else btn.append(h('span', { class: 'cover' }, '🎨')); } catch { /* картинка не открылась — кнопка останется пустой */ }
   });
+  // Готовые картинки: помощник и звери. Зверь открывается вместе со своей наклейкой (первые шесть — сразу).
+  const ready = [['hero', heroSVG(store.profile.hero, 'happy')], ...ISLANDS.filter(isl => isl.n < 6 || store.islandDone(isl)).map(isl => ['a' + isl.n, animalSVG(isl.n)])];
+  const row = h('div', { class: 'ready-row' }, ready.map(([key, svg]) => h('button', { class: 'ready-pic', 'aria-label': 'готовая картинка', html: svg,
+    onclick: async () => { sfx('tap'); try { openPage(x, await addArtPage(store, key, svg), again); } catch { say(P.photoFail); } } })));
+  shelf.after(row);
   say(note || P.photoHello);
 }
 
@@ -277,7 +304,9 @@ async function openPage(x, id, back) {
   let mask = null;
   const setLines = () => {
     const img = lg.createImageData(W, H);
-    if (item.v) {
+    if (item.art) { // готовая картинка: линии — её собственные тёмные контуры и границы цветов
+      for (let i = 0; i < W * H; i++) { img.data[i * 4] = 43; img.data[i * 4 + 1] = 45; img.data[i * 4 + 2] = 66; img.data[i * 4 + 3] = mask[i] ? 255 : 0; }
+    } else if (item.v) {
       const a = sketch(gray, W, H, item.lv ?? 1);
       for (let i = 0; i < a.length; i++) { img.data[i * 4] = 43; img.data[i * 4 + 1] = 45; img.data[i * 4 + 2] = 66; img.data[i * 4 + 3] = a[i]; }
     } else for (let i = 0; i < W * H; i++) { img.data[i * 4] = 43; img.data[i * 4 + 1] = 45; img.data[i * 4 + 2] = 66; img.data[i * 4 + 3] = fpx[i * 4 + 3] > 110 ? 255 : 0; }
@@ -289,7 +318,7 @@ async function openPage(x, id, back) {
     sg.drawImage(full, 0, 0, lw, lh);
     const px = sg.getImageData(0, 0, lw, lh).data, rgb3 = [new Float32Array(lw * lh), new Float32Array(lw * lh), new Float32Array(lw * lh)];
     for (let i = 0; i < lw * lh; i++) { rgb3[0][i] = px[i * 4]; rgb3[1][i] = px[i * 4 + 1]; rgb3[2][i] = px[i * 4 + 2]; }
-    const m = lineMask(rgb3, lw, lh, 0), img = sg.createImageData(lw, lh);
+    const m = lineMask(rgb3, lw, lh, item.art ? 2 : 0), img = sg.createImageData(lw, lh);
     for (let i = 0; i < m.length; i++) if (m[i]) img.data[i * 4 + 3] = 255;
     sg.clearRect(0, 0, lw, lh); sg.putImageData(img, 0, 0);
     const big = canvasOf(W, H), bg = big.getContext('2d', { willReadFrequently: true });
@@ -298,26 +327,43 @@ async function openPage(x, id, back) {
     const a = bg.getImageData(0, 0, W, H).data;
     mask = new Uint8Array(W * H);
     for (let i = 0; i < mask.length; i++) mask[i] = a[i * 4 + 3] > 100 ? 1 : 0;
+    if (item.art) { // у готовой картинки главные линии — её собственные тёмные контуры; границы цветов добавляем только вдали от них
+      const dark = new Uint8Array(W * H);
+      for (let i = 0; i < dark.length; i++) dark[i] = gray[i] < 95 ? 1 : 0;
+      const near = grow(dark, W, H, 10);
+      for (let i = 0; i < mask.length; i++) if (near[i]) mask[i] = 0;
+      mask = grow(mask, W, H, 1);
+      for (let i = 0; i < mask.length; i++) if (dark[i]) mask[i] = 1;
+    }
   };
-  setLines(); setAreas();
+  setAreas(); setLines();
 
   // --- инструменты ---
-  let color = COLORS[0], tool = 'fill', size = 26, drawing = null, dirty = false;
-  const undo = [];
-  const remember = () => { undo.push(pg.getImageData(0, 0, W, H)); if (undo.length > 10) undo.shift(); dirty = true; };
+  let color = COLORS[0], tool = 'fill', size = 26, drawing = null, dirty = false, hue = 0, stamp = STAMPS[0];
+  const undo = [], redo = [];
+  const remember = () => { undo.push(pg.getImageData(0, 0, W, H)); if (undo.length > 10) undo.shift(); redo.length = 0; dirty = true; };
   const pos = e => { const r = paint.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H]; };
   const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
   function fillAt(p) {
     const area = floodFill(mask, W, H, p[0], p[1]);
     if (!area) return;
-    const img = pg.getImageData(0, 0, W, H), d = img.data, [r, g, b] = rgb(color);
-    for (let i = 0; i < area.length; i++) if (area[i]) { d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = 255; }
+    const img = pg.getImageData(0, 0, W, H), d = img.data;
+    let [r, g, b] = color === 'rainbow' ? [0, 0, 0] : rgb(color);
+    if (tool === 'magic') { // волшебная палочка: настоящий цвет этого места на фотографии (средний по области)
+      let n = 0; r = g = b = 0;
+      for (let i = 0; i < area.length; i++) if (area[i] && !mask[i]) { r += fpx[i * 4]; g += fpx[i * 4 + 1]; b += fpx[i * 4 + 2]; n++; }
+      n ||= 1; r /= n; g /= n; b /= n;
+    }
+    for (let i = 0; i < area.length; i++) if (area[i]) {
+      if (color === 'rainbow' && tool !== 'magic') [r, g, b] = rainbow(Math.floor(i / W) / H + (i % W) / W / 3);
+      d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = 255;
+    }
     pg.putImageData(img, 0, 0);
     sfx('pop');
   }
   function stroke(a, b) {
     pg.globalCompositeOperation = tool === 'erase' ? 'destination-out' : 'source-over';
-    pg.strokeStyle = color; pg.lineWidth = size; pg.lineCap = pg.lineJoin = 'round';
+    pg.strokeStyle = color === 'rainbow' ? `rgb(${rainbow((hue += 0.012) % 1)})` : color; pg.lineWidth = size; pg.lineCap = pg.lineJoin = 'round';
     pg.beginPath(); pg.moveTo(a[0], a[1]); pg.lineTo(b[0], b[1]); pg.stroke();
     pg.globalCompositeOperation = 'source-over';
   }
@@ -325,7 +371,8 @@ async function openPage(x, id, back) {
     e.preventDefault();
     remember();
     const p = pos(e);
-    if (tool === 'fill') return fillAt(p);
+    if (tool === 'fill' || tool === 'magic') return fillAt(p);
+    if (tool === 'stamp') { pg.font = `${size * 3}px serif`; pg.textAlign = 'center'; pg.textBaseline = 'middle'; pg.fillText(stamp, p[0], p[1]); return sfx('pop'); }
     try { paint.setPointerCapture(e.pointerId); } catch { /* не страшно */ }
     drawing = p; stroke(p, p);
   });
@@ -335,15 +382,18 @@ async function openPage(x, id, back) {
 
   const pickOne = (box, cls, el) => box.querySelectorAll('.' + cls).forEach(q => q.classList.toggle('sel', q === el));
   const colors = h('div', { class: 'board-tools' }), tools = h('div', { class: 'board-tools' });
-  COLORS.forEach((c, i) => { const b = h('button', { class: 'color' + (i ? '' : ' sel') + (c === '#ffffff' ? ' white' : ''), style: `background:${c}`, 'aria-label': 'цвет', onclick: () => { color = c; pickOne(colors, 'color', b); if (tool === 'erase') setTool('fill'); } }); colors.append(b); });
+  COLORS.forEach((c, i) => { const b = h('button', { class: 'color' + (i ? '' : ' sel') + (c === '#ffffff' ? ' white' : c === 'rainbow' ? ' rainbow' : ''), style: c === 'rainbow' ? '' : `background:${c}`, 'aria-label': 'цвет', onclick: () => { color = c; pickOne(colors, 'color', b); if (tool === 'erase' || tool === 'magic' || tool === 'stamp') setTool('fill'); } }); colors.append(b); });
   const toolBtns = {};
-  const setTool = t => { tool = t; for (const [k, b] of Object.entries(toolBtns)) b.classList.toggle('sel', k === t); sizes.classList.toggle('off', t === 'fill'); };
-  for (const [t, icon, label] of [['fill', '🪣', 'заливка'], ['brush', '🖌️', 'кисть'], ['erase', '🧽', 'ластик']]) tools.append(toolBtns[t] = h('button', { class: 'tool-btn' + (t === 'fill' ? ' sel' : ''), 'aria-label': label, onclick: () => { sfx('tap'); setTool(t); } }, icon));
+  const setTool = t => { tool = t; for (const [k, b] of Object.entries(toolBtns)) b.classList.toggle('sel', k === t); sizes.classList.toggle('off', t === 'fill' || t === 'magic'); stamps.classList.toggle('hidden-row', t !== 'stamp'); };
+  const stamps = h('div', { class: 'board-tools hidden-row' });
+  STAMPS.forEach((e, i) => { const b = h('button', { class: 'tool-btn stamp-btn' + (i ? '' : ' sel'), 'aria-label': 'наклейка', onclick: () => { stamp = e; pickOne(stamps, 'stamp-btn', b); sfx('tap'); } }, e); stamps.append(b); });
+  for (const [t, icon, label] of [['fill', '🪣', 'заливка'], ['brush', '🖌️', 'кисть'], ['magic', '🪄', 'волшебная палочка: цвет как на картинке'], ['stamp', '⭐', 'наклейки'], ['erase', '🧽', 'ластик']]) tools.append(toolBtns[t] = h('button', { class: 'tool-btn' + (t === 'fill' ? ' sel' : ''), 'aria-label': label, onclick: () => { sfx('tap'); setTool(t); } }, icon));
   const sizes = h('span', { class: 'sizes off' });
   [[12, 's'], [26, 'm'], [46, 'l']].forEach(([sz, k]) => { const b = h('button', { class: `size size-${k}` + (sz === size ? ' sel' : ''), 'aria-label': 'толщина кисти', onclick: () => { size = sz; pickOne(sizes, 'size', b); } }, h('i')); sizes.append(b); });
-  tools.append(sizes, h('button', { class: 'tool-btn', 'aria-label': 'отменить', onclick: () => { const last = undo.pop(); if (last) { pg.putImageData(last, 0, 0); sfx('tap'); } } }, '↩️'));
+  tools.append(sizes, h('button', { class: 'tool-btn', 'aria-label': 'отменить', onclick: () => { const last = undo.pop(); if (last) { redo.push(pg.getImageData(0, 0, W, H)); pg.putImageData(last, 0, 0); sfx('tap'); } } }, '↩️'),
+    h('button', { class: 'tool-btn', 'aria-label': 'вернуть', onclick: () => { const next = redo.pop(); if (next) { undo.push(pg.getImageData(0, 0, W, H)); pg.putImageData(next, 0, 0); sfx('tap'); } } }, '↪️'));
   // Насколько тёмный карандаш: лёгкий, обычный, тёмный (для раскрасок нового вида).
-  if (item.v) {
+  if (item.v && !item.art) {
     const lv = h('span', { class: 'sizes' });
     ['▫️', '◽', '◻️'].forEach((icon, n) => { const b = h('button', { class: 'tool-btn lines-btn' + (n === (item.lv ?? 1) ? ' sel' : ''), 'aria-label': ['лёгкий рисунок', 'обычный рисунок', 'тёмный рисунок'][n], onclick: () => { item.lv = n; store.save(); setLines(); pickOne(lv, 'lines-btn', b); sfx('tap'); } }, h('span', { class: 'lv lv' + n })); lv.append(b); });
     tools.append(lv);
@@ -361,14 +411,21 @@ async function openPage(x, id, back) {
     sfx('star');
     leave(P.photoSaved);
   };
+  const print = () => { // лист А4: раскраска как есть (нераскрашенную можно красить карандашами)
+    document.getElementById('print')?.remove();
+    const page = h('div', { id: 'print', class: 'album' }, h('img', { src: compose(1400).toDataURL('image/png'), alt: '', style: 'width:100%' }));
+    document.body.append(page);
+    window.addEventListener('afterprint', () => page.remove(), { once: true });
+    window.print();
+  };
   const remove = () => { const list = store.part('colorings', []), i = list.indexOf(item); if (i >= 0) list.splice(i, 1); dropPage(id); store.save(); back(); };
 
   // Образец — маленькое фото в уголке; нажатие прячет его или показывает снова.
   const sample = item.v ? h('button', { class: 'photo-sample', 'aria-label': 'образец', onclick: () => sample.classList.toggle('hide') }, h('img', { src: URL.createObjectURL(src), alt: '' })) : null;
   const stage = h('div', { class: 'board-stage', style: `aspect-ratio:${W}/${H};--ar:${(W / H).toFixed(3)}` }, paint, lines, sample);
-  screen('level', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), ibtn('🗑️', 'убрать эту раскраску', remove, 'small'), h('span', { class: 'grow' }),
+  screen('level', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), ibtn('🖨️', 'распечатать', print, 'small'), h('span', { class: 'grow' }),
     h('button', { class: 'check', 'aria-label': 'готово', onclick: finish }, '✔'), ibtn('🔊', 'послушать', () => say(P.photoReady), 'speak')),
-  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, tools)));
+  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, stamps, tools)));
   if (!saved) keep();
   say(P.photoReady);
 }

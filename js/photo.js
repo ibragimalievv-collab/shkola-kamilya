@@ -130,6 +130,56 @@ export function lineMask(rgb, w, h, level = 1) {
   }
   return mask;
 }
+// Линии для РИСОВАННОЙ картинки (несколько ровных цветов и тёмные контуры). rgb — три слоя, 0…255.
+// Каждая точка относится к одному из основных цветов картинки; линия — там, где встречаются два разных цвета,
+// и везде, где сам цвет тёмный (это нарисованный контур). Размытые края не дают двойных линий: такая точка
+// просто получает ближайший из основных цветов. Возвращает маску: 1 — линия.
+export function artMask(rgb, w, h) {
+  const [R, G, B] = rgb, n = w * h, bins = new Map();
+  for (let i = 0; i < n; i += 3) { const k = ((R[i] >> 4) << 8) | ((G[i] >> 4) << 4) | (B[i] >> 4); const b = bins.get(k); if (b) { b[0] += R[i]; b[1] += G[i]; b[2] += B[i]; b[3]++; } else bins.set(k, [R[i], G[i], B[i], 1]); }
+  const main = [...bins.values()].filter(b => b[3] > (n / 3) * 0.002).map(b => [b[0] / b[3], b[1] / b[3], b[2] / b[3]]);
+  const dark = c => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2] < 95;
+  const cls = new Uint8Array(n), isDark = main.map(dark);
+  for (let i = 0; i < n; i++) {
+    let best = 0, m = Infinity;
+    for (let c = 0; c < main.length; c++) { const d = (R[i] - main[c][0]) ** 2 + (G[i] - main[c][1]) ** 2 + (B[i] - main[c][2]) ** 2; if (d < m) { m = d; best = c; } }
+    cls[i] = best;
+  }
+  // убираем одиночные «чужие» точки на краях: точка берёт цвет, которого вокруг больше (два прохода — края ровнее)
+  let fix = cls;
+  const cnt = new Uint16Array(main.length);
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Uint8Array(fix);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x; cnt.fill(0);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) cnt[fix[i + dy * w + dx]]++;
+      let b = fix[i];
+      for (let c = 0; c < cnt.length; c++) if (cnt[c] > cnt[b]) b = c;
+      next[i] = b;
+    }
+    fix = next;
+  }
+  const edge = new Uint8Array(n), darkAll = new Uint8Array(n);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, a = fix[i];
+    if (isDark[a]) { darkAll[i] = 1; continue; }
+    const r = x < w - 1 ? fix[i + 1] : a, d = y < h - 1 ? fix[i + w] : a;
+    if ((r !== a && !isDark[r]) || (d !== a && !isDark[d])) edge[i] = 1; // граница двух светлых цветов — рисуем линию сами
+  }
+  // Тёмное пятно (чёрная голова пингвина, маска енота) не должно оставаться сплошной кляксой: оставляем от него
+  // только контур, а середину можно раскрашивать. Тонкие контуры и зрачки остаются как есть.
+  const light = new Uint8Array(n);
+  for (let i = 0; i < n; i++) light[i] = darkAll[i] ? 0 : 1;
+  const deep = Math.max(6, Math.round(w * 0.035)); // пятно считается большим, если оно шире семи сотых листа (зрачки остаются чёрными)
+  const notCore = grow(light, w, h, deep), core = new Uint8Array(n);
+  let darkN = 0;
+  for (let i = 0; i < n; i++) { core[i] = notCore[i] ? 0 : 1; darkN += darkAll[i]; }
+  const inner = grow(core, w, h, deep - Math.max(3, Math.round(w * 0.008))); // середина тёмного пятна; по краю остаётся контур
+  const mask = new Uint8Array(n), thick = grow(edge, w, h, darkN < n * 0.01 ? 3 : 2); // если тёмных контуров почти нет (помощник) — линии потолще
+  for (let i = 0; i < n; i++) if ((darkAll[i] && !inner[i]) || thick[i]) mask[i] = 1;
+  return mask;
+}
+
 // Карандашный рисунок из фотографии. gray — яркость точек (0…255). Возвращает «силу карандаша» для каждой точки (0 — чистая бумага, 255 — чёрная линия).
 // Способ известен художникам как «осветление основы»: яркость точки делим на среднюю яркость вокруг неё.
 // Ровные места становятся белыми, а там, где что-то меняется (глаза, волосы, складки), остаются штрихи.
@@ -186,7 +236,31 @@ const nearest = (m, w, h, x, y, r) => { // ближайшая к (x, y) точк
   }
   return -1;
 };
-export function floodFill(mask, w, h, x, y) {
+// Пятна листа (связные места без линий): номер пятна для каждой точки и размеры пятен. Считается один раз на маску.
+const spotsOf = new WeakMap();
+function spots(mask, w, h) {
+  if (spotsOf.has(mask)) return spotsOf.get(mask);
+  const id = new Int32Array(w * h).fill(-1), size = [], stack = new Int32Array(w * h);
+  for (let s0 = 0; s0 < id.length; s0++) {
+    if (mask[s0] || id[s0] >= 0) continue;
+    const k = size.length; let top = 0, n = 0;
+    stack[top++] = s0; id[s0] = k;
+    while (top) {
+      const i = stack[--top], px = i % w; n++;
+      if (px > 0 && !mask[i - 1] && id[i - 1] < 0) { id[i - 1] = k; stack[top++] = i - 1; }
+      if (px < w - 1 && !mask[i + 1] && id[i + 1] < 0) { id[i + 1] = k; stack[top++] = i + 1; }
+      if (i >= w && !mask[i - w] && id[i - w] < 0) { id[i - w] = k; stack[top++] = i - w; }
+      if (i < id.length - w && !mask[i + w] && id[i + w] < 0) { id[i + w] = k; stack[top++] = i + w; }
+    }
+    size.push(n);
+  }
+  const res = { id, size };
+  spotsOf.set(mask, res);
+  return res;
+}
+// absorb — пятнышки меньше этого размера, прилегающие к заливаемой области, закрашиваются вместе с ней
+// (на фотографии между областями остаются узкие щёлки, в которые пальцем не попасть).
+export function floodFill(mask, w, h, x, y, absorb = 0) {
   x = Math.round(x); y = Math.round(y);
   if (x < 0 || y < 0 || x >= w || y >= h) return null;
   if (!thickOf.has(mask)) thickOf.set(mask, grow(mask, w, h, GAP));
@@ -210,6 +284,11 @@ export function floodFill(mask, w, h, x, y) {
     let n = 0;
     for (let i = 0; i < out.length; i++) n += out[i];
     if (n > w * h * 0.04) return null;
+  }
+  if (absorb) {
+    const { id, size } = spots(mask, w, h), near = grow(out, w, h, 5), take = new Set();
+    for (let i = 0; i < out.length; i++) if (near[i] && !out[i] && !mask[i] && size[id[i]] < absorb) take.add(id[i]);
+    if (take.size) for (let i = 0; i < out.length; i++) if (id[i] >= 0 && take.has(id[i])) out[i] = 1;
   }
   return grow(out, w, h, 3);
 }
@@ -301,6 +380,8 @@ async function openPage(x, id, back) {
   fg.drawImage(bmp, 0, 0, W, H);
   const fpx = fg.getImageData(0, 0, W, H).data, gray = new Float32Array(W * H);
   for (let i = 0; i < gray.length; i++) gray[i] = 0.3 * fpx[i * 4] + 0.59 * fpx[i * 4 + 1] + 0.11 * fpx[i * 4 + 2];
+  // Сглаженные цвета картинки — для волшебной палочки (мягко, без зерна фотографии).
+  const soft = [0, 1, 2].map(c => { const a = new Float32Array(W * H); for (let i = 0; i < a.length; i++) a[i] = fpx[i * 4 + c]; return item.art ? a : blur(blur(a, W, H, 3), W, H, 3); });
   let mask = null;
   const setLines = () => {
     const img = lg.createImageData(W, H);
@@ -314,11 +395,16 @@ async function openPage(x, id, back) {
   };
   const setAreas = () => {
     if (!item.v) { mask = new Uint8Array(W * H); for (let i = 0; i < mask.length; i++) mask[i] = fpx[i * 4 + 3] > 110 ? 1 : 0; return; }
+    if (item.art) { // рисованная картинка: линии ровно по её цветам
+      const ch = [0, 1, 2].map(c => { const a = new Uint8Array(W * H); for (let i = 0; i < a.length; i++) a[i] = fpx[i * 4 + c]; return a; });
+      mask = artMask(ch, W, H);
+      return;
+    }
     const lw = Math.round(W / 2), lh = Math.round(H / 2), small = canvasOf(lw, lh), sg = small.getContext('2d', { willReadFrequently: true });
     sg.drawImage(full, 0, 0, lw, lh);
     const px = sg.getImageData(0, 0, lw, lh).data, rgb3 = [new Float32Array(lw * lh), new Float32Array(lw * lh), new Float32Array(lw * lh)];
     for (let i = 0; i < lw * lh; i++) { rgb3[0][i] = px[i * 4]; rgb3[1][i] = px[i * 4 + 1]; rgb3[2][i] = px[i * 4 + 2]; }
-    const m = lineMask(rgb3, lw, lh, item.art ? 2 : 0), img = sg.createImageData(lw, lh);
+    const m = lineMask(rgb3, lw, lh, 0), img = sg.createImageData(lw, lh);
     for (let i = 0; i < m.length; i++) if (m[i]) img.data[i * 4 + 3] = 255;
     sg.clearRect(0, 0, lw, lh); sg.putImageData(img, 0, 0);
     const big = canvasOf(W, H), bg = big.getContext('2d', { willReadFrequently: true });
@@ -327,14 +413,6 @@ async function openPage(x, id, back) {
     const a = bg.getImageData(0, 0, W, H).data;
     mask = new Uint8Array(W * H);
     for (let i = 0; i < mask.length; i++) mask[i] = a[i * 4 + 3] > 100 ? 1 : 0;
-    if (item.art) { // у готовой картинки главные линии — её собственные тёмные контуры; границы цветов добавляем только вдали от них
-      const dark = new Uint8Array(W * H);
-      for (let i = 0; i < dark.length; i++) dark[i] = gray[i] < 95 ? 1 : 0;
-      const near = grow(dark, W, H, 10);
-      for (let i = 0; i < mask.length; i++) if (near[i]) mask[i] = 0;
-      mask = grow(mask, W, H, 1);
-      for (let i = 0; i < mask.length; i++) if (dark[i]) mask[i] = 1;
-    }
   };
   setAreas(); setLines();
 
@@ -344,18 +422,18 @@ async function openPage(x, id, back) {
   const remember = () => { undo.push(pg.getImageData(0, 0, W, H)); if (undo.length > 10) undo.shift(); redo.length = 0; dirty = true; };
   const pos = e => { const r = paint.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H]; };
   const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const dot = p => { // кружок вокруг касания
+    const a = new Uint8Array(W * H), R = 14, cx = Math.round(p[0]), cy = Math.round(p[1]);
+    for (let y = Math.max(0, cy - R); y <= Math.min(H - 1, cy + R); y++) for (let x = Math.max(0, cx - R); x <= Math.min(W - 1, cx + R); x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= R * R) a[y * W + x] = 1;
+    return a;
+  };
   function fillAt(p) {
-    const area = floodFill(mask, W, H, p[0], p[1]);
-    if (!area) return;
+    const area = floodFill(mask, W, H, p[0], p[1], item.v && !item.art ? 700 : 0) || dot(p);
     const img = pg.getImageData(0, 0, W, H), d = img.data;
     let [r, g, b] = color === 'rainbow' ? [0, 0, 0] : rgb(color);
-    if (tool === 'magic') { // волшебная палочка: настоящий цвет этого места на фотографии (средний по области)
-      let n = 0; r = g = b = 0;
-      for (let i = 0; i < area.length; i++) if (area[i] && !mask[i]) { r += fpx[i * 4]; g += fpx[i * 4 + 1]; b += fpx[i * 4 + 2]; n++; }
-      n ||= 1; r /= n; g /= n; b /= n;
-    }
     for (let i = 0; i < area.length; i++) if (area[i]) {
-      if (color === 'rainbow' && tool !== 'magic') [r, g, b] = rainbow(Math.floor(i / W) / H + (i % W) / W / 3);
+      if (tool === 'magic') { r = soft[0][i]; g = soft[1][i]; b = soft[2][i]; } // волшебная палочка: настоящие цвета этого места на картинке
+      else if (color === 'rainbow') [r, g, b] = rainbow(Math.floor(i / W) / H + (i % W) / W / 3);
       d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; d[i * 4 + 3] = 255;
     }
     pg.putImageData(img, 0, 0);

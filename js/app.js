@@ -239,7 +239,7 @@ function playLevel(level) {
       },
     };
     const done = solved / (solved + queue.length + 1);
-    screen('level', h('div', { class: 'bar' }, twice(ibtn('🏠', 'выйти: нажать два раза', leave), () => say(P.exitTwice)), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
+    screen('level', h('div', { class: 'bar' }, twice(ibtn('🏠', 'выйти: нажать два раза', leave), () => sfx('miss')), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
       ibtn('🔊', 'послушать задание', () => say(prompt), 'speak')), root);
     mech = renderTask(t, c);
     say(t.say);

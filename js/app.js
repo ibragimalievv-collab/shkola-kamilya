@@ -136,13 +136,16 @@ function map() {
       ibtn('📚', 'книжки', () => library(X, map), booksOpen(store) > Object.keys(store.part('books', {})).length ? 'badge' : ''),
       ibtn('🏠', 'домик', () => homeScreen(X, map), fresh ? 'badge' : ''),
       ibtn('✍️', 'пишу ручкой', () => penScreen({ store, app, back: map, hero }), pens ? 'badge' : ''),
-      ibtn('🏆', 'мои наклейки и рисунки', collection),
-      ibtn('🔒', 'для родителей', () => openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }), 'small')),
+      ibtn('🏆', 'мои наклейки и рисунки', collection)),
+
     h('div', { class: 'bar places' },
       ibtn('✉️', 'письма от Лумика', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
       ibtn('🛒', 'магазин игрушек', () => shopScreen(X, map), shopOpen(store) ? '' : 'dim'),
       ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map)),
-      ibtn('📷', 'раскрась фото', () => photoScreen(X, map))),
+      ibtn('📷', 'раскрась фото', () => photoScreen(X, map)),
+      // Кнопка для взрослых — с подписью, чтобы родители сразу видели, куда им заходить (внутри — задачка на умножение).
+      h('button', { class: 'parent-btn', 'aria-label': 'настройки для родителей', onclick: () => { sfx('tap'); openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }); } },
+        h('span', {}, '⚙️'), h('span', { class: 'parent-txt' }, h('b', {}, 'Настройки'), h('small', {}, 'для родителей')))),
     h('div', { class: 'sea' }, cards),
     next ? ibtn('▶', 'играть дальше', () => playLevel(next), 'play float') : null);
   app.querySelector('.island.here')?.scrollIntoView({ block: 'center' });

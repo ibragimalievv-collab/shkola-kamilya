@@ -1,5 +1,5 @@
 // РАСКРАСЬ ФОТО. Ребёнок фотографирует себя, маму, кота — или выбирает готовый снимок, — и приложение
-// превращает фотографию в раскраску: толстые контуры на белом листе. Области заливаются одним касанием,
+// превращает фотографию в карандашный рисунок на белом листе. Области заливаются одним касанием,
 // есть кисть, ластик и отмена; недокрашенное сохраняется.
 // Уменьшенная фотография, контуры и краска хранятся только на этом устройстве и никуда не отправляются.
 
@@ -29,54 +29,118 @@ function blur(src, w, h, r) {
   }
   return out;
 }
-// Настройки трёх уровней: 0 — мало линий (только крупные формы), 1 — средне, 2 — подробно.
-// r — размытие, top — какая доля самых резких перепадов даёт линии, floor — ниже этого перепад не считается линией,
-// min — линии короче этого выбрасываются как мусор, grow — на сколько точек утолщать.
-const LEVELS = [{ r: 3, top: 0.05, floor: 5, min: 70, grow: 2 }, { r: 2, top: 0.08, floor: 7, min: 40, grow: 2 }, { r: 1, top: 0.12, floor: 9, min: 18, grow: 1 }];
+// Настройки трёх уровней: 0 — мало линий (только самые крупные пятна), 1 — средне, 2 — подробно.
+// r — размытие, k — на сколько цветов делим снимок, min — пятна меньше этого сливаются с соседними.
+const LEVELS = [{ r: 3, k: 6, min: 500 }, { r: 2, k: 8, min: 320 }, { r: 2, k: 12, min: 140 }];
 
-// Линии раскраски. gray — яркость точек (0…255). Возвращает маску: 1 — линия, 0 — чистое место.
-// Шаги: размыть → найти резкие перепады яркости → оставить только «гребень» перепада (тонкая линия) →
-// выбросить короткие обрывки и слабые линии → утолстить, чтобы линии были ровной толщины и смыкались.
-export function lineMask(gray, w, h, level = 1) {
-  const cfg = LEVELS[level] || LEVELS[1], b = blur(blur(blur(gray, w, h, cfg.r), w, h, cfg.r), w, h, cfg.r), // три прохода — плавное размытие, у перепада появляется чёткая вершина
-     mag = new Float32Array(w * h), dir = new Uint8Array(w * h);
-  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-    const i = y * w + x;
-    const gx = b[i - w + 1] + 2 * b[i + 1] + b[i + w + 1] - b[i - w - 1] - 2 * b[i - 1] - b[i + w - 1];
-    const gy = b[i + w - 1] + 2 * b[i + w] + b[i + w + 1] - b[i - w - 1] - 2 * b[i - w] - b[i - w + 1];
-    mag[i] = Math.hypot(gx, gy);
-    const a = Math.abs(gx), c = Math.abs(gy);
-    dir[i] = a > 2.4 * c ? 0 : c > 2.4 * a ? 1 : gx * gy > 0 ? 2 : 3; // куда направлен перепад: вбок, вверх-вниз, по одной из диагоналей
+// Линии раскраски. rgb — три слоя (красный, зелёный, синий, 0…255) небольшой картинки. Возвращает маску: 1 — линия.
+// Мы не ищем «края» (на живых снимках они рвутся), а делим снимок на крупные цветовые пятна — лицо, волосы,
+// одежда, фон — и проводим линии по границам пятен. Поэтому каждая область замкнута, и краска из неё не вытекает.
+// Шаги: размыть → собрать похожие цвета в несколько групп → сгладить границы → слить мелкие пятна с соседями → границы.
+export function lineMask(rgb, w, h, level = 1) {
+  const cfg = LEVELS[level] || LEVELS[1], n = w * h;
+  const [R, G, B] = rgb.map(layer => blur(blur(layer, w, h, cfg.r), w, h, cfg.r));
+  // Цвет точки: яркость (с меньшим весом, чтобы тень на лице не делила его пополам) и два цветовых оттенка.
+  const f = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const y = 0.3 * R[i] + 0.59 * G[i] + 0.11 * B[i];
+    f[i * 3] = y * 0.5; f[i * 3 + 1] = (B[i] - y) * 1.5; f[i * 3 + 2] = (R[i] - y) * 1.5;
   }
-  const sample = [];
-  for (let i = 0; i < mag.length; i += 7) sample.push(mag[i]);
-  sample.sort((p, q) => p - q);
-  const hi = Math.max(cfg.floor * 2, sample[Math.floor(sample.length * (1 - cfg.top))] || 0), lo = Math.max(cfg.floor, hi * 0.4);
-  // гребень: точка сильнее обеих соседок поперёк линии
-  const ridge = new Uint8Array(w * h), step = [1, w, w + 1, w - 1];
-  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-    const i = y * w + x, m = mag[i];
-    if (m >= lo && m >= mag[i + step[dir[i]]] && m > mag[i - step[dir[i]]]) ridge[i] = 1;
+  // Группы цветов: первая — средний цвет, каждая следующая — самый непохожий на уже выбранные; потом уточняем.
+  const pts = [];
+  for (let y = 0; y < h; y += 3) for (let x = 0; x < w; x += 3) pts.push(y * w + x);
+  const cen = [[0, 0, 0]];
+  for (const i of pts) for (let c = 0; c < 3; c++) cen[0][c] += f[i * 3 + c] / pts.length;
+  const d2 = (i, c) => (f[i * 3] - c[0]) ** 2 + (f[i * 3 + 1] - c[1]) ** 2 + (f[i * 3 + 2] - c[2]) ** 2;
+  while (cen.length < cfg.k) {
+    let far = pts[0], best = -1;
+    for (const i of pts) { let m = Infinity; for (const c of cen) m = Math.min(m, d2(i, c)); if (m > best) { best = m; far = i; } }
+    if (best < 60) break; // цвета кончились: снимок почти одноцветный
+    cen.push([f[far * 3], f[far * 3 + 1], f[far * 3 + 2]]);
   }
-  // связные линии: оставляем длинные и содержащие хотя бы одну сильную точку
-  const keep = new Uint8Array(w * h), seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
-  for (let s = 0; s < ridge.length; s++) {
-    if (!ridge[s] || seen[s]) continue;
-    let top = 0, n = 0, strong = false;
-    const members = [];
-    stack[top++] = s; seen[s] = 1;
-    while (top) {
-      const i = stack[--top]; members.push(i); n++;
-      if (mag[i] >= hi) strong = true;
-      const x = i % w;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const j = i + dy * w + dx;
-        if ((dx || dy) && j >= 0 && j < ridge.length && x + dx >= 0 && x + dx < w && ridge[j] && !seen[j]) { seen[j] = 1; stack[top++] = j; }
-      }
+  const nearest = i => { let b = 0, m = Infinity; for (let c = 0; c < cen.length; c++) { const d = d2(i, cen[c]); if (d < m) { m = d; b = c; } } return b; };
+  for (let it = 0; it < 8; it++) {
+    const sum = cen.map(() => [0, 0, 0, 0]);
+    for (const i of pts) { const s = sum[nearest(i)]; s[0] += f[i * 3]; s[1] += f[i * 3 + 1]; s[2] += f[i * 3 + 2]; s[3]++; }
+    sum.forEach((s, c) => { if (s[3]) cen[c] = [s[0] / s[3], s[1] / s[3], s[2] / s[3]]; });
+  }
+  let lab = new Uint8Array(n);
+  for (let i = 0; i < n; i++) lab[i] = nearest(i);
+  // Сглаживание границ: точка берёт группу, которой вокруг неё больше всего.
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Uint8Array(lab), cnt = new Uint16Array(cen.length);
+    for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+      cnt.fill(0);
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) cnt[lab[(y + dy) * w + x + dx]]++;
+      let b = lab[y * w + x];
+      for (let c = 0; c < cnt.length; c++) if (cnt[c] > cnt[b]) b = c;
+      next[y * w + x] = b;
     }
-    if (strong && n >= cfg.min) for (const i of members) keep[i] = 1;
+    lab = next;
   }
-  return grow(keep, w, h, cfg.grow);
+  // Пятна (связные области одной группы). Мелкие сливаем с тем соседом, с которым у них самая длинная граница.
+  const id = new Int32Array(n), stack = new Int32Array(n);
+  const paintSpots = () => {
+    id.fill(-1);
+    const size = [];
+    for (let s = 0; s < n; s++) {
+      if (id[s] >= 0) continue;
+      const k = size.length; let top = 0, cnt = 0;
+      stack[top++] = s; id[s] = k;
+      while (top) {
+        const i = stack[--top], x = i % w; cnt++;
+        if (x > 0 && id[i - 1] < 0 && lab[i - 1] === lab[i]) { id[i - 1] = k; stack[top++] = i - 1; }
+        if (x < w - 1 && id[i + 1] < 0 && lab[i + 1] === lab[i]) { id[i + 1] = k; stack[top++] = i + 1; }
+        if (i >= w && id[i - w] < 0 && lab[i - w] === lab[i]) { id[i - w] = k; stack[top++] = i - w; }
+        if (i < n - w && id[i + w] < 0 && lab[i + w] === lab[i]) { id[i + w] = k; stack[top++] = i + w; }
+      }
+      size.push(cnt);
+    }
+    return size;
+  };
+  for (let round = 0; round < 6; round++) {
+    const size = paintSpots(), border = new Map(); // для мелкого пятна: сосед → длина общей границы
+    let small = 0;
+    const touch = (a, b) => { if (size[a] >= cfg.min) return; let m = border.get(a); if (!m) border.set(a, m = new Map()); m.set(b, (m.get(b) || 0) + 1); };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (x < w - 1 && id[i] !== id[i + 1]) { touch(id[i], id[i + 1]); touch(id[i + 1], id[i]); }
+      if (y < h - 1 && id[i] !== id[i + w]) { touch(id[i], id[i + w]); touch(id[i + w], id[i]); }
+    }
+    const into = new Map(), sample = new Int32Array(size.length).fill(-1);
+    for (let i = 0; i < n; i++) if (sample[id[i]] < 0) sample[id[i]] = i;
+    for (const [a, m] of border) {
+      let best = -1, len = 0;
+      for (const [b, l] of m) if (l > len || (l === len && size[b] > size[best])) { best = b; len = l; }
+      if (best >= 0 && !into.has(best)) { into.set(a, lab[sample[best]]); small++; } // сосед сам не должен сливаться в этот же раунд
+    }
+    if (!small) break;
+    for (let i = 0; i < n; i++) { const t = into.get(id[i]); if (t !== undefined) lab[i] = t; }
+  }
+  paintSpots();
+  const mask = new Uint8Array(n);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if ((x < w - 1 && id[i] !== id[i + 1]) || (y < h - 1 && id[i] !== id[i + w])) mask[i] = 1;
+  }
+  return mask;
+}
+// Карандашный рисунок из фотографии. gray — яркость точек (0…255). Возвращает «силу карандаша» для каждой точки (0 — чистая бумага, 255 — чёрная линия).
+// Способ известен художникам как «осветление основы»: яркость точки делим на среднюю яркость вокруг неё.
+// Ровные места становятся белыми, а там, где что-то меняется (глаза, волосы, складки), остаются штрихи.
+// level: 0 — лёгкий рисунок, 1 — обычный, 2 — тёмный и подробный.
+export function sketch(gray, w, h, level = 1) {
+  const soft = blur(gray, w, h, 1), around = blur(blur(soft, w, h, 7), w, h, 7), out = new Uint8ClampedArray(w * h), v = new Float32Array(w * h);
+  for (let i = 0; i < v.length; i++) v[i] = Math.min(1, (soft[i] + 4) / (around[i] + 4)); // 1 — как вокруг (бумага), меньше — темнее соседей (штрих)
+  // Сила нажима подбирается под снимок, чтобы карандаша на листе было в меру: пёстрая чёрная собака не станет
+  // сплошным пятном, а бледный снимок не останется пустым. Доля «закрашенного» листа — 7, 11 или 16 процентов.
+  const want = [0.07, 0.11, 0.16][level] ?? 0.11;
+  const ink = p => { let s = 0, n = 0; for (let i = 0; i < v.length; i += 5) { s += 1 - v[i] ** p; n++; } return s / n; };
+  let lo = 0.5, hi = 9;
+  for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (ink(mid) > want) hi = mid; else lo = mid; }
+  const power = (lo + hi) / 2;
+  for (let i = 0; i < out.length; i++) out[i] = 255 * (1 - v[i] ** power);
+  return out;
 }
 // Утолщение маски на r точек во все стороны.
 function grow(mask, w, h, r) {
@@ -93,10 +157,10 @@ function grow(mask, w, h, r) {
   return cur;
 }
 // Заливка: область без линий вокруг точки (x, y). Возвращает маску области (1 — залить) или null, если рядом нет чистого места.
-// Линии с фотографии редко смыкаются идеально, поэтому заливка «не пролезает» в щели уже 12 точек:
+// Линии с фотографии редко смыкаются идеально, поэтому заливка «не пролезает» в щели уже 6 точек:
 // сначала область ищется по утолщённым линиям (щели в них закрыты), потом возвращается к настоящим линиям.
 // Заливка заходит на пару точек под линию, чтобы у линий не оставалось белой каёмки.
-const GAP = 6, thickOf = new WeakMap();
+const GAP = 3, thickOf = new WeakMap();
 function spread(free, w, h, start) { // все точки, до которых можно дойти от start по разрешённым (free[i] === 0) местам
   const out = new Uint8Array(w * h), stack = new Int32Array(w * h);
   let top = 0;
@@ -142,7 +206,7 @@ export function floodFill(mask, w, h, x, y) {
     for (let i = 0; i < out.length; i++) n += out[i];
     if (n > w * h * 0.04) return null;
   }
-  return grow(out, w, h, 2);
+  return grow(out, w, h, 3);
 }
 
 // ================= ХРАНЕНИЕ =================
@@ -202,20 +266,40 @@ async function openPage(x, id, back) {
   paint.className = 'layer ink'; lines.className = 'layer over';
   if (saved) { try { pg.drawImage(await createImageBitmap(saved), 0, 0, W, H); } catch { /* начнём с чистого листа */ } }
 
-  // Яркость точек фото (для раскрасок старого вида фото нет — там хранились готовые линии).
-  const tmp = canvasOf(W, H), tg = tmp.getContext('2d');
-  tg.drawImage(bmp, 0, 0);
-  const px = tg.getImageData(0, 0, W, H).data, gray = new Uint8Array(W * H);
-  for (let i = 0; i < gray.length; i++) gray[i] = 0.3 * px[i * 4] + 0.59 * px[i * 4 + 1] + 0.11 * px[i * 4 + 2];
+  // На экране — карандашный рисунок с фотографии. Под ним, невидимо, лист поделён на крупные цветовые области:
+  // по ним работает заливка. Области считаем на картинке вдвое меньше листа (так быстрее), потом увеличиваем.
+  // Для раскрасок старого вида фото нет — там хранились готовые линии.
+  const full = canvasOf(W, H), fg = full.getContext('2d', { willReadFrequently: true });
+  fg.fillStyle = '#fff'; fg.fillRect(0, 0, W, H);
+  fg.drawImage(bmp, 0, 0, W, H);
+  const fpx = fg.getImageData(0, 0, W, H).data, gray = new Float32Array(W * H);
+  for (let i = 0; i < gray.length; i++) gray[i] = 0.3 * fpx[i * 4] + 0.59 * fpx[i * 4 + 1] + 0.11 * fpx[i * 4 + 2];
   let mask = null;
   const setLines = () => {
-    if (item.v) mask = lineMask(gray, W, H, item.lv ?? 1);
-    else { mask = new Uint8Array(W * H); for (let i = 0; i < mask.length; i++) mask[i] = px[i * 4 + 3] > 110 ? 1 : 0; }
     const img = lg.createImageData(W, H);
-    for (let i = 0; i < mask.length; i++) if (mask[i]) { img.data[i * 4] = 43; img.data[i * 4 + 1] = 45; img.data[i * 4 + 2] = 66; img.data[i * 4 + 3] = 255; }
+    if (item.v) {
+      const a = sketch(gray, W, H, item.lv ?? 1);
+      for (let i = 0; i < a.length; i++) { img.data[i * 4] = 43; img.data[i * 4 + 1] = 45; img.data[i * 4 + 2] = 66; img.data[i * 4 + 3] = a[i]; }
+    } else for (let i = 0; i < W * H; i++) { img.data[i * 4] = 43; img.data[i * 4 + 1] = 45; img.data[i * 4 + 2] = 66; img.data[i * 4 + 3] = fpx[i * 4 + 3] > 110 ? 255 : 0; }
     lg.putImageData(img, 0, 0);
   };
-  setLines();
+  const setAreas = () => {
+    if (!item.v) { mask = new Uint8Array(W * H); for (let i = 0; i < mask.length; i++) mask[i] = fpx[i * 4 + 3] > 110 ? 1 : 0; return; }
+    const lw = Math.round(W / 2), lh = Math.round(H / 2), small = canvasOf(lw, lh), sg = small.getContext('2d', { willReadFrequently: true });
+    sg.drawImage(full, 0, 0, lw, lh);
+    const px = sg.getImageData(0, 0, lw, lh).data, rgb3 = [new Float32Array(lw * lh), new Float32Array(lw * lh), new Float32Array(lw * lh)];
+    for (let i = 0; i < lw * lh; i++) { rgb3[0][i] = px[i * 4]; rgb3[1][i] = px[i * 4 + 1]; rgb3[2][i] = px[i * 4 + 2]; }
+    const m = lineMask(rgb3, lw, lh, 0), img = sg.createImageData(lw, lh);
+    for (let i = 0; i < m.length; i++) if (m[i]) img.data[i * 4 + 3] = 255;
+    sg.clearRect(0, 0, lw, lh); sg.putImageData(img, 0, 0);
+    const big = canvasOf(W, H), bg = big.getContext('2d', { willReadFrequently: true });
+    bg.imageSmoothingEnabled = false;
+    bg.drawImage(small, 0, 0, W, H);
+    const a = bg.getImageData(0, 0, W, H).data;
+    mask = new Uint8Array(W * H);
+    for (let i = 0; i < mask.length; i++) mask[i] = a[i * 4 + 3] > 100 ? 1 : 0;
+  };
+  setLines(); setAreas();
 
   // --- инструменты ---
   let color = COLORS[0], tool = 'fill', size = 26, drawing = null, dirty = false;
@@ -258,10 +342,10 @@ async function openPage(x, id, back) {
   const sizes = h('span', { class: 'sizes off' });
   [[12, 's'], [26, 'm'], [46, 'l']].forEach(([sz, k]) => { const b = h('button', { class: `size size-${k}` + (sz === size ? ' sel' : ''), 'aria-label': 'толщина кисти', onclick: () => { size = sz; pickOne(sizes, 'size', b); } }, h('i')); sizes.append(b); });
   tools.append(sizes, h('button', { class: 'tool-btn', 'aria-label': 'отменить', onclick: () => { const last = undo.pop(); if (last) { pg.putImageData(last, 0, 0); sfx('tap'); } } }, '↩️'));
-  // Сколько линий: мало, средне, много (для раскрасок нового вида).
+  // Насколько тёмный карандаш: лёгкий, обычный, тёмный (для раскрасок нового вида).
   if (item.v) {
     const lv = h('span', { class: 'sizes' });
-    ['▫️', '◽', '◻️'].forEach((icon, n) => { const b = h('button', { class: 'tool-btn lines-btn' + (n === (item.lv ?? 1) ? ' sel' : ''), 'aria-label': ['мало линий', 'средне линий', 'много линий'][n], onclick: () => { item.lv = n; store.save(); setLines(); pickOne(lv, 'lines-btn', b); sfx('tap'); } }, h('span', { class: 'lv lv' + n })); lv.append(b); });
+    ['▫️', '◽', '◻️'].forEach((icon, n) => { const b = h('button', { class: 'tool-btn lines-btn' + (n === (item.lv ?? 1) ? ' sel' : ''), 'aria-label': ['лёгкий рисунок', 'обычный рисунок', 'тёмный рисунок'][n], onclick: () => { item.lv = n; store.save(); setLines(); pickOne(lv, 'lines-btn', b); sfx('tap'); } }, h('span', { class: 'lv lv' + n })); lv.append(b); });
     tools.append(lv);
   }
 

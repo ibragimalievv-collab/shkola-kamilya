@@ -473,3 +473,8 @@ svg { display: block; width: 100%; height: 100%; }
 .photo-sample { position: absolute; right: 1.2vmin; top: 1.2vmin; width: 24%; max-width: 150px; border-radius: 1.6vmin; overflow: hidden; box-shadow: 0 0 0 .5vmin #fff, 0 .6vmin 1.4vmin #0004; padding: 0; background: #fff; transition: width .25s, opacity .25s; z-index: 2; }
 .photo-sample img { display: block; width: 100%; } .photo-sample.hide { width: 7%; opacity: .55; }
 .bar .check { width: clamp(52px, 11vmin, 76px); height: clamp(52px, 11vmin, 76px); font-size: 1.6em; }
+
+/* кнопка для взрослых на карте */
+.bar.places { flex-wrap: wrap; }
+.parent-btn { display: flex; align-items: center; gap: 1.2vmin; padding: 1vmin 2.2vmin; border-radius: 99px; background: #ffffffd9; box-shadow: 0 .5vmin 0 #0002; font-size: clamp(13px, 2.6vmin, 18px); color: var(--ink); min-height: 44px; }
+.parent-btn > span:first-child { font-size: 1.5em; } .parent-txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; } .parent-txt small { opacity: .7; font-size: .8em; }

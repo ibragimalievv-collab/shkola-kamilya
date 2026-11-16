@@ -34,6 +34,18 @@ async function toggle(key, btn, refresh) {
   recorder.start();
 }
 
+// Кнопки для одной записи: записать, прослушать, удалить.
+export function clipCell(key, label, changed = () => {}) {
+  const el = h('div', { class: 'clip' });
+  const draw = () => {
+    const b = h('button', { class: 'pbtn rec' + (hasClip(key) ? ' on' : ''), title: 'Нажмите, скажите, нажмите ещё раз', onclick: () => toggle(key, b, () => { draw(); changed(); }) }, label);
+    el.replaceChildren(b, hasClip(key) ? h('button', { class: 'pbtn mini', 'aria-label': 'прослушать', onclick: () => playClip(key) }, '▶') : null,
+      hasClip(key) ? h('button', { class: 'pbtn mini warn', 'aria-label': 'удалить запись', onclick: async () => { await deleteClip(key); draw(); changed(); } }, '✕') : null);
+  };
+  draw();
+  return el;
+}
+
 // Карточка для родительского раздела.
 export function voiceStudio() {
   const rec = hasRecordedVoice(), basic = !rec && voiceIsBasic(), none = !rec && !russianVoices().length;
@@ -48,16 +60,7 @@ export function voiceStudio() {
     const items = g.items(), sum = h('summary', {}, '');
     const grid = h('div', { class: 'clip-grid' });
     const title = () => { sum.textContent = `${g.title}: записано ${clipCount(g.prefix)} из ${items.length}`; };
-    const cell = ([key, label]) => {
-      const el = h('div', { class: 'clip' });
-      const draw = () => {
-        const b = h('button', { class: 'pbtn rec' + (hasClip(key) ? ' on' : ''), title: 'Нажмите, скажите, нажмите ещё раз', onclick: () => toggle(key, b, () => { draw(); title(); }) }, label);
-        el.replaceChildren(b, hasClip(key) ? h('button', { class: 'pbtn mini', 'aria-label': 'прослушать', onclick: () => playClip(key) }, '▶') : null,
-          hasClip(key) ? h('button', { class: 'pbtn mini warn', 'aria-label': 'удалить запись', onclick: async () => { await deleteClip(key); draw(); title(); } }, '✕') : null);
-      };
-      draw();
-      return el;
-    };
+    const cell = ([key, label]) => clipCell(key, label, title);
     // Ячейки создаём, только когда родитель раскрыл группу: слов много.
     const det = h('details', { ontoggle: () => { if (det.open && !grid.children.length) grid.append(...items.map(cell)); } }, sum, h('p', { class: 'hint' }, g.tip + ' Нажмите на кнопку, произнесите и нажмите ещё раз (запись сама остановится через 4 секунды).'), grid);
     title();

@@ -141,6 +141,7 @@ function build(t, c) {
     return el;
   });
   if (t.pic) c.root.append(B(c, 'bigpic tapme', t.pic, () => c.say(t.say)));
+  if (t.hear) c.root.append(B(c, 'bigspeak small', '🔊', () => c.say(t.say))); // диктант: слово можно только услышать
   c.root.append(row('build' + (t.wide ? ' wide' : ''), row('slots', ...slots), row('tiles', ...tiles)));
   return {
     reveal: () => slots.forEach((s, i) => { s.textContent = t.target[i]; s.classList.add('full', 'glow'); }),
@@ -156,6 +157,7 @@ function missing(t, c) {
   const fill = () => { gap.textContent = t.opts[t.a]; gap.classList.add('filled'); };
   function choose(i) { if (i === t.a) { fill(); c.ok(); } else { btns[i].classList.add('wrong'); btns[i].disabled = true; c.miss(); } }
   if (t.pic) c.root.append(B(c, 'bigpic tapme', t.pic, () => c.say(t.say)));
+  if (t.hear) c.root.append(B(c, 'bigspeak small', '🔊', () => c.say(t.say))); // диктант: слово можно только услышать
   c.root.append(row('cells', ...cells), row('opts', ...btns));
   return { reveal: fill, auto: () => choose(t.a) };
 }
@@ -517,7 +519,29 @@ function readaloud(t, c) {
   return { reveal: () => {}, auto: () => c.ok() };
 }
 
-const MECH = { clock, readaloud, share, bubbles: collect, fish: collect, find: collect, pick, listen: pick, story: pick, memory, pairs, baskets, build, missing, claps,
+// ---------- 37. Слияние: две буквы сливаются в слог ----------
+function blend(t, c) {
+  let step = 0;
+  const btns = t.opts.map((o, i) => B(c, 'opt', face(o), () => choose(i))), opts = row('opts hidden', ...btns);
+  const first = B(c, 'tile bl', t.syl[0], () => tap(0)), second = B(c, 'tile bl', t.syl[1], () => tap(1));
+  const pair = row('bl-pair', first, h('span', { class: 'bl-plus' }, '+'), second);
+  const join = () => { step = 2; pair.classList.add('joined'); };
+  function tap(i) {
+    if (step === 2) return c.say(t.whole);                       // уже слились — можно послушать ещё раз
+    if (i === 0) { step = 1; first.classList.add('lit'); return c.say(t.parts[0]); }
+    if (step === 0) { shake(c, second); return c.say(t.parts[0]); } // сначала первая буква
+    join(); sfx('pop'); c.say(t.whole);
+    c.later(() => opts.classList.remove('hidden'), 2800);
+  }
+  function choose(i) {
+    if (i === t.a) { btns[i].classList.add('right'); c.ok(); } else { btns[i].classList.add('wrong'); btns[i].disabled = true; c.miss(); }
+  }
+  c.root.append(pair, opts);
+  const open = () => { join(); opts.classList.remove('hidden'); };
+  return { reveal: () => { open(); btns[t.a].classList.add('right', 'glow'); }, auto: () => { open(); choose(t.a); } };
+}
+
+const MECH = { blend, clock, readaloud, share, bubbles: collect, fish: collect, find: collect, pick, listen: pick, story: pick, memory, pairs, baskets, build, missing, claps,
   truefalse, trace, copy, draw, drawtask, count, feed, train, compare, house, numline, keypad, tenframe, shop, problem, dots, stones, paint, chart, groups, array };
 
 // Показать задание на экране.

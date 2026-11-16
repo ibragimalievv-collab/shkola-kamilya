@@ -8,6 +8,7 @@ import { ORDER, WORDS } from '../../app/js/data.js';
 import { PEN_TASKS } from '../../app/js/cursive.js';
 import { STORIES } from '../../app/js/stories.js';
 import { BOOKS, bareWord } from '../../app/js/books.js';
+import { MAIL } from '../../app/js/mail.js';
 
 export function collect(seeds = 400) {
   const packs = new Map(); // остров → (отпечаток → кусочек)
@@ -21,6 +22,11 @@ export function collect(seeds = 400) {
   for (const t of PEN_TASKS) add('pen', t.say);
   // Книжки: каждая страница целиком и каждое слово отдельно (его можно нажать).
   for (const [, , pages] of BOOKS) { for (const [, text] of pages) { add('books', text); for (const w of text.split(' ')) { const b = bareWord(w); if (b) add('books', `{ш:${b}|${b}}`); } } }
+  // Письма от Лумика: каждое предложение и каждое слово отдельно.
+  for (const [, , lines] of MAIL) for (const line of lines) { add('mail', line); for (const w of line.split(' ')) { const b = bareWord(w); if (b) add('mail', `{ш:${b}|${b}}`); } }
+  // Задания вне островов: свои слова семьи (сами слова записывают родители) и магазин на карте с любой ценой.
+  { const r = makeRng(7); add('common', makeTask(['famW', 'мама', 'pick'], r).say); add('common', makeTask(['famW', 'мама', 'build'], r).say);
+    for (let price = 2; price <= 50; price++) { add('common', makeTask(['shopBuy', price, '🧸'], r).say); add('common', makeTask(['changeBuy', price, [10, 20, 50, 100].find(v => v > price)], r).say); } }
   // Истории островов.
   for (const isl of ISLANDS) for (const [, line] of STORIES[isl.id]?.[1] || []) add(isl.id, line);
   for (const isl of ISLANDS) for (const L of isl.levels) {
@@ -36,6 +42,7 @@ export function collect(seeds = 400) {
         for (const pair of t.pairs || []) for (const side of pair) if (side?.say) add(isl.id, side.say);
         if (t.m === 'story') for (const s of t.text) add(isl.id, s);
         if (t.canHear) add(isl.id, t.text);
+        if (t.m === 'blend') add('common', t.whole);
       }
     }
   }

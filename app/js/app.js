@@ -12,7 +12,7 @@ import { ISLANDS, LEVELS } from './curriculum.js';
 import { buildSession, makeTask, adjust, tokW } from './tasks.js';
 import { createStore } from './store.js';
 import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames, unlockAudio } from './audio.js';
-import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL } from './phrases.js';
+import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL, tokName } from './phrases.js';
 import { heroSVG, HERO_PARTS, PALETTE, animalSVG, islandSVG, starSVG, LINE_COLOR } from './art.js';
 import { renderTask } from './mechanics.js';
 import { openParent } from './parent.js';
@@ -47,7 +47,11 @@ function pickNew(list, kind) {
   lastSaid[kind] = i;
   return list[i];
 }
-const praise = () => pickNew(named() ? [...PRAISE, ...PRAISE_NAME(store.profile.name)] : PRAISE, 'praise');
+// У остальных имён готовой записи нет: имя звучит записью родителей («Для родителей → Ребёнок») или голосом устройства.
+const callable = () => !named() && store.profile.name !== 'Ребёнок';
+const nameTok = () => tokName(store.profile.name);
+const helloText = () => (named() ? P.hi(store.profile.name) : callable() ? `${P.hiStart} ${nameTok()}! ${P.hiNoName.replace(/^Привет! /, '')}` : P.hiNoName);
+const praise = () => pickNew(named() ? [...PRAISE, ...PRAISE_NAME(store.profile.name)] : callable() ? [...PRAISE, `${P.praiseStart1} ${nameTok()}!`, `${P.praiseStart2} ${nameTok()}! ${P.praiseEnd2}`] : PRAISE, 'praise');
 // Общий набор для экранов из файла fun.js.
 const X = { store, app, screen, hero, ibtn, say, map };
 // Сохранить запись чтения вслух (только на устройстве; храним последние 60).
@@ -77,7 +81,7 @@ function welcome() {
     // Кнопка для взрослого: вписать имя своего ребёнка (то же самое есть в разделе «Для родителей»).
     h('button', { class: 'name-btn', onclick: () => {
       const n = prompt('Как зовут ребёнка? Это имя будет на заставке и в разделе для родителей.', store.profile.name);
-      if (n && n.trim()) { store.profile.name = n.trim().slice(0, 20); store.save(); welcome(); }
+      if (n && n.trim()) { store.profile.name = n.trim().slice(0, 20); store.save(); welcome(); say(named() ? P.hi(store.profile.name).split('!')[0] + '!' : `${P.hiStart} ${nameTok()}!`); } // сразу произносим новое имя
     } }, '✏️ Имя ребёнка: ' + store.profile.name));
 }
 
@@ -120,7 +124,7 @@ function map() {
       next && next.island === isl.n ? petImg(store, 'pet onmap') : null,
       h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` })));
   });
-  const hi = (named() ? P.hi(store.profile.name) : P.hiNoName) + (days >= 2 ? ' ' + P.streak(days) : '');
+  const hi = helloText() + (days >= 2 ? ' ' + P.streak(days) : '');
   if (next) { loadPack(ISLANDS[next.island].id); const after = ISLANDS[next.island + 1]; if (after) loadPack(after.id); } // подгружаем голос для ближайших островов
   const pens = penCount(store);
   screen('map',

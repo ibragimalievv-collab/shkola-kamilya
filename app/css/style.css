@@ -465,3 +465,11 @@ svg { display: block; width: 100%; height: 100%; }
 /* ---------- раскрась фото ---------- */
 .layer.over { pointer-events: none; }
 .book.page-thumb { padding: 1vmin; aspect-ratio: 4/3; } .book.page-thumb img { width: 100%; height: 100%; object-fit: contain; }
+
+.tool-btn.sel { box-shadow: 0 0 0 .7vmin var(--sea2); } .color.white { box-shadow: 0 0 0 .3vmin #adb5bd; } .color.white.sel { box-shadow: 0 0 0 .8vmin var(--ink); }
+.sizes { display: inline-flex; gap: 1.4vmin; align-items: center; } .sizes.off { opacity: .3; pointer-events: none; }
+.lv { display: block; border: .45vmin solid var(--ink); border-radius: 50%; width: 55%; height: 55%; }
+.lv1 { box-shadow: inset 0 0 0 .5vmin #fff, inset 0 0 0 .9vmin var(--ink); } .lv2 { background: repeating-linear-gradient(45deg, var(--ink) 0 .4vmin, #fff .4vmin 1vmin); }
+.photo-sample { position: absolute; right: 1.2vmin; top: 1.2vmin; width: 24%; max-width: 150px; border-radius: 1.6vmin; overflow: hidden; box-shadow: 0 0 0 .5vmin #fff, 0 .6vmin 1.4vmin #0004; padding: 0; background: #fff; transition: width .25s, opacity .25s; z-index: 2; }
+.photo-sample img { display: block; width: 100%; } .photo-sample.hide { width: 7%; opacity: .55; }
+.bar .check { width: clamp(52px, 11vmin, 76px); height: clamp(52px, 11vmin, 76px); font-size: 1.6em; }

@@ -3,10 +3,11 @@
 import { h, today, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { LINES, lineOf, labelOf } from './tasks.js';
-import { say, hush, sfx, russianVoices } from './audio.js';
+import { say, hush, sfx, russianVoices, voicedNames } from './audio.js';
 import { P } from './phrases.js';
 import { penParent } from './pen.js';
-import { voiceStudio } from './voice.js';
+import { voiceStudio, clipCell } from './voice.js';
+import { tokName } from './phrases.js';
 import { parentExtras } from './parent2.js';
 
 const btn = (text, fn, cls = '') => h('button', { class: 'pbtn ' + cls, onclick: fn }, text);
@@ -36,10 +37,12 @@ function parentScreen(ctx) {
   const profiles = card('Ребёнок',
     h('div', { class: 'prow' }, Object.entries(st.profiles).map(([id, pr]) => btn(pr.name, () => { store.switchProfile(id); again(); }, id === st.current ? 'on' : ''))),
     h('div', { class: 'prow' },
-      btn('Переименовать', () => { const n = prompt('Имя ребёнка', p.name); if (n && n.trim()) { p.name = n.trim().slice(0, 20); store.save(); again(); } }),
+      btn('Переименовать', () => { const n = prompt('Имя ребёнка', p.name); if (n && n.trim()) { p.name = n.trim().slice(0, 20); store.save(); again(); say(`${P.hiStart} ${tokName(p.name)}!`); } }),
       btn('Добавить ребёнка', () => { const n = prompt('Имя второго ребёнка', ''); if (n && n.trim()) { store.addProfile(n.trim().slice(0, 20)); again(); } }),
       btn('Перекрасить помощника', repaint),
       Object.keys(st.profiles).length > 1 ? btn('Удалить этот профиль', () => { if (confirm(`Удалить профиль «${p.name}» со всем прогрессом?`)) { store.removeProfile(st.current); again(); } }, 'warn') : null),
+    voicedNames().includes(p.name) || p.name === 'Ребёнок' ? null : h('div', { class: 'fam-row' }, clipCell('и:' + p.name.toLowerCase(), `🎙 Записать имя «${p.name}»`)),
+    voicedNames().includes(p.name) || p.name === 'Ребёнок' ? null : h('p', { class: 'hint' }, 'Помощник зовёт ребёнка по имени. Для этого имени готовой записи нет, поэтому его произносит встроенный голос устройства — он отличается от голоса помощника. Чтобы звучало лучше, запишите имя своим голосом: нажмите на кнопку, скажите имя и нажмите ещё раз.'),
     h('p', { class: 'hint' }, 'У каждого ребёнка свой прогресс, свой помощник и свои рисунки.'));
 
   // --- прогресс простыми словами ---

@@ -8,7 +8,7 @@ import { MAIL } from '../app/js/mail.js';
 import { bareWord } from '../app/js/books.js';
 import { stageOf, ORDER } from '../app/js/data.js';
 import { toyPrice } from '../app/js/extra.js';
-import { contours } from '../app/js/photo.js';
+import { lineMask, floodFill } from '../app/js/photo.js';
 
 test('слияние: для каждого слога верный ответ — этот слог, и он один', () => {
   const r = makeRng(5);
@@ -75,15 +75,46 @@ test('письма от Лумика: не меньше 12, от простых 
   }
 });
 
-test('раскраска из фото: линии только на границах, ровные места остаются чистыми', () => {
-  const w = 120, h = 90, gray = new Uint8Array(w * h).fill(230);
-  for (let y = 25; y < 65; y++) for (let x = 35; x < 85; x++) gray[y * w + x] = 60; // тёмный прямоугольник на светлом фоне
-  const a = contours(gray, w, h), at = (x, y) => a[y * w + x];
-  assert.ok(at(35, 45) > 200 && at(85, 45) > 200 && at(60, 25) > 200 && at(60, 65) > 200, 'границы прямоугольника — линии');
-  assert.equal(at(60, 45), 0, 'середина прямоугольника чистая');
-  assert.equal(at(8, 8), 0, 'фон чистый');
-  const lines = a.filter(v => v > 128).length / a.length;
-  assert.ok(lines > 0.01 && lines < 0.3, `линий ${Math.round(lines * 100)}% — раскраску можно раскрашивать`);
-  // совсем ровная картинка — пустой лист, без мусора
-  assert.ok(contours(new Uint8Array(w * h).fill(128), w, h).every(v => v === 0));
+// Тестовая картинка: светлый фон с шумом, тёмный круг-«голова» и прямоугольник-«одежда».
+function scene(w, h) {
+  const g = new Uint8Array(w * h);
+  let seed = 7; const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5) * 22;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const head = Math.hypot(x - 160, y - 90) < 60, body = x > 100 && x < 220 && y > 160 && y < 230;
+    g[y * w + x] = Math.max(0, Math.min(255, (head ? 90 : body ? 150 : 225) + rnd()));
+  }
+  return g;
+}
+test('раскраска из фото: линии замкнуты, фон и середина фигур чистые, шум не превращается в линии', () => {
+  const w = 320, h = 240, g = scene(w, h);
+  for (const level of [0, 1, 2]) {
+    const m = lineMask(g, w, h, level), share = m.reduce((a, b) => a + b, 0) / m.length;
+    assert.ok(share > 0.01 && share < 0.25, `уровень ${level}: линий ${Math.round(share * 100)}%`);
+    assert.equal(m[90 * w + 160], 0, 'середина круга чистая');
+    assert.equal(m[10 * w + 10], 0, 'фон чистый');
+    // заливка внутри круга не вытекает наружу, а заливка фона не затекает в круг
+    const inside = floodFill(m, w, h, 160, 90), outside = floodFill(m, w, h, 10, 10);
+    assert.equal(inside[10 * w + 10], 0, `уровень ${level}: круг замкнут`);
+    assert.equal(outside[90 * w + 160], 0, `уровень ${level}: фон не затекает в круг`);
+    assert.ok(inside.reduce((a, b) => a + b, 0) > 5000, 'круг заливается целиком');
+  }
+  assert.ok(lineMask(new Uint8Array(w * h).fill(128), w, h, 1).every(v => v === 0), 'ровная картинка — пустой лист');
+});
+test('заливка: касание по линии закрашивает соседнее место, касание мимо листа ничего не делает', () => {
+  const w = 60, h = 40, m = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) m[y * w + 30] = 1; // вертикальная линия делит лист пополам
+  const left = floodFill(m, w, h, 5, 20);
+  assert.equal(left[20 * w + 5], 1); assert.equal(left[20 * w + 50], 0);
+  assert.ok(floodFill(m, w, h, 30, 20), 'по линии — ближайшая половина');
+  assert.equal(floodFill(m, w, h, -5, 20), null);
+});
+test('заливка не вытекает через небольшой разрыв в линии', () => {
+  const w = 200, h = 120, m = new Uint8Array(w * h);
+  for (let x = 40; x <= 160; x++) for (const y of [20, 21, 99, 100]) m[y * w + x] = 1;
+  for (let y = 20; y <= 100; y++) for (const x of [40, 41, 159, 160]) if (y < 57 || y > 63) m[y * w + x] = 1; // в боковых стенках — щели по 6 точек
+  const inside = floodFill(m, w, h, 100, 60), outside = floodFill(m, w, h, 10, 10);
+  assert.equal(inside[60 * w + 100], 1);
+  assert.equal(inside[10 * w + 10], 0, 'краска не вышла наружу');
+  assert.equal(inside[60 * w + 20], 0, 'и рядом со щелью тоже');
+  assert.equal(outside[60 * w + 100], 0, 'фон не затёк внутрь');
 });

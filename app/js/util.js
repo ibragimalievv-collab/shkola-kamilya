@@ -58,3 +58,15 @@ export function today(d = new Date()) {
   const p = x => String(x).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+// Защита от случайного нажатия: кнопка срабатывает только со второго нажатия подряд.
+// Первое нажатие её «подсвечивает» на две с половиной секунды (onArm — что сделать в этот момент, например сказать подсказку).
+export function twice(btn, onArm) {
+  let armed = 0;
+  btn.addEventListener('click', e => {
+    if (Date.now() - armed < 2500) return;
+    e.stopImmediatePropagation(); armed = Date.now(); btn.classList.add('armed'); onArm?.();
+    setTimeout(() => btn.classList.remove('armed'), 2500);
+  }, true);
+  return btn;
+}

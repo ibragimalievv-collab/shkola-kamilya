@@ -478,3 +478,19 @@ svg { display: block; width: 100%; height: 100%; }
 .bar.places { flex-wrap: wrap; }
 .parent-btn { display: flex; align-items: center; gap: 1.2vmin; padding: 1vmin 2.2vmin; border-radius: 99px; background: #ffffffd9; box-shadow: 0 .5vmin 0 #0002; font-size: clamp(13px, 2.6vmin, 18px); color: var(--ink); min-height: 44px; }
 .parent-btn > span:first-child { font-size: 1.5em; } .parent-txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; } .parent-txt small { opacity: .7; font-size: .8em; }
+
+/* раскраска: радуга, наклейки, готовые картинки, защита от случайного нажатия */
+.color.rainbow { background: conic-gradient(#ff595e, #ffca3a, #8ac926, #1982c4, #6a4c93, #ff595e); }
+.hidden-row { display: none !important; } .stamp-btn { font-size: 1.5em; }
+.ready-row { display: flex; flex-wrap: wrap; gap: 2vmin; justify-content: center; width: 100%; padding: 1vmin; }
+.ready-pic { width: clamp(84px, 19vmin, 130px); height: clamp(84px, 19vmin, 130px); border-radius: 3vmin; background: #fff; box-shadow: 0 .6vmin 0 #c9d6e8; padding: 1.2vmin; } .ready-pic svg { width: 100%; height: 100%; }
+.armed { outline: .8vmin solid #ff6b6b; animation: pulse .6s infinite; opacity: 1 !important; }
+
+/* родительский экран: закладки разделов и плитки итогов */
+.ptabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 900px; width: 100%; margin: 0 auto; position: sticky; top: 0; z-index: 3; background: var(--sea); padding: 6px 0; flex-shrink: 0; }
+.ptab { display: flex; flex-direction: column; gap: 2px; align-items: center; padding: 10px 6px; border-radius: 12px; background: #ffffffb3; font: inherit; min-height: 56px; text-align: center; }
+.ptab b { font-size: 15px; } .ptab small { font-size: 11px; opacity: .7; line-height: 1.2; } .ptab.on { background: #fff; box-shadow: 0 0 0 3px #1982c4; }
+.ptab-body { display: flex; flex-direction: column; gap: 12px; width: 100%; flex-shrink: 0; }
+.ptiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.ptile { background: #f1f6ff; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; text-align: center; } .ptile b { font-size: 22px; } .ptile span { font-size: 13px; opacity: .75; }
+@media (max-width: 560px) { .ptabs { grid-template-columns: repeat(2, 1fr); } .ptab small { display: none; } }

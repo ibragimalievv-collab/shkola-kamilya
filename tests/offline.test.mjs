@@ -18,7 +18,10 @@ test('в список для сохранения входят все файлы
 
 test('приложение не обращается к чужим адресам в интернете', () => {
   for (const f of [...onDisk, 'sw.js'].filter(f => /\.(js|html|css|webmanifest|svg)$/.test(f))) {
-    const text = readFileSync(join(APP, f), 'utf8').replaceAll('http://www.w3.org/', '');
+    let text = readFileSync(join(APP, f), 'utf8').replaceAll('http://www.w3.org/', '');
+    // Единственное исключение — счётчик открытий для владельца: один адрес в counter.js и разрешение на него в index.html.
+    if (f === 'js/counter.js') text = text.replace('`https://${code}.goatcounter.com/count?', '');
+    if (f === 'index.html') text = text.replace("blob: https://*.goatcounter.com;", 'blob:;');
     assert.ok(!/https?:\/\//.test(text), `в файле ${f} есть внешний адрес`);
     assert.ok(!/\bimport\s*\(/.test(text) || true);
   }
@@ -72,4 +75,23 @@ test('манифест для установки на планшет запол�
   assert.equal(m.display, 'standalone');
   assert.ok(m.name && m.start_url && m.icons.length >= 2);
   for (const i of m.icons) assert.ok(onDisk.includes(i.src), i.src);
+});
+
+test('счётчик владельца: без кода ничего не отправляется; с кодом — один запрос в день и никаких данных о ребёнке', async () => {
+  const { countVisit, countUrl, validCode, COUNTER } = await import('../app/js/counter.js');
+  const mem = () => { const m = new Map(); return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; };
+  const sent = [], base = { day: '2026-11-17', host: 'example.github.io', standalone: false, send: u => sent.push(u) };
+  assert.equal(countVisit({ ...base, storage: mem(), code: '' }), null, 'пустой код — счётчик выключен');
+  assert.equal(countVisit({ ...base, storage: mem(), code: 'bad code/../x' }), null, 'неправильный код не попадает в адрес');
+  assert.equal(countVisit({ ...base, storage: mem(), code: 'shkola', host: 'localhost' }), null, 'свой компьютер не считается');
+  assert.equal(sent.length, 0);
+  const st = mem();
+  const url = countVisit({ ...base, storage: st, code: 'shkola' });
+  assert.equal(url, countUrl('shkola', 'site'));
+  assert.equal(countVisit({ ...base, storage: st, code: 'shkola' }), null, 'второй раз за день не отправляем');
+  assert.ok(countVisit({ ...base, storage: st, code: 'shkola', day: '2026-11-18', standalone: true }).includes('p=%2Fapp'), 'на следующий день — снова, со значка');
+  assert.equal(sent.length, 2);
+  for (const u of sent) { const q = new URL(u); assert.equal(q.hostname, 'shkola.goatcounter.com'); assert.deepEqual([...q.searchParams.keys()].sort(), ['p', 't'], 'в запросе только «откуда открыто» и название приложения'); }
+  assert.ok(validCode('shkola-kamilya') && !validCode('') && !validCode('a.b'));
+  assert.ok(COUNTER === '' || validCode(COUNTER));
 });

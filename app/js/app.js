@@ -6,6 +6,7 @@ import { idb } from './db.js';
 import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { GIFT_COLORS, STORIES } from './stories.js';
 import { photoScreen } from './photo.js';
+import { countVisit } from './counter.js';
 import { shopScreen, shopOpen, mailScreen, mailWaiting, duoScreen } from './extra.js';
 import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
@@ -344,6 +345,8 @@ window.__fun = { reward: id => { const L = LEVELS.find(l => l.id === id); reward
 window.__play = srcs => playLevel({ id: 'demo', island: 0, k: 0, intro: '', tasks: srcs, demo: true });
 loadClips();
 initVoice();
+// Счётчик для владельца: «приложение открыли» — раз в день, без каких-либо данных о ребёнке (см. counter.js).
+countVisit({ storage: localStorage, day: today(), host: location.hostname, standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true });
 document.addEventListener('pointerdown', unlockAudio, { once: true, capture: true });
 // Напоминание о занятии: пока приложение открыто или свёрнуто, раз в минуту смотрим на часы.
 let reminded = '';

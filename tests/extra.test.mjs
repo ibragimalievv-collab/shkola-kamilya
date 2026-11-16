@@ -8,7 +8,7 @@ import { MAIL } from '../app/js/mail.js';
 import { bareWord } from '../app/js/books.js';
 import { stageOf, ORDER } from '../app/js/data.js';
 import { toyPrice } from '../app/js/extra.js';
-import { lineMask, floodFill, sketch } from '../app/js/photo.js';
+import { lineMask, floodFill, sketch, artMask } from '../app/js/photo.js';
 
 test('слияние: для каждого слога верный ответ — этот слог, и он один', () => {
   const r = makeRng(5);
@@ -136,4 +136,47 @@ test('карандашный рисунок: ровное место — чис�
   assert.ok(b[edge] > 120, 'у границы тёмный штрих');
   assert.ok(b[far] < 12, 'вдали от границы бумага чистая');
   assert.ok(a[edge] <= b[edge] && b[edge] <= c[edge], 'уровни идут от светлого к тёмному');
+});
+
+test('заливка на фото закрашивает и узкую щёлку рядом, а на готовой картинке — нет', () => {
+  const w = 120, h = 80, m = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) { m[y * w + 60] = 1; m[y * w + 64] = 1; } // две линии рядом: между ними щёлка в три точки
+  const plain = floodFill(m, w, h, 20, 40), photo = floodFill(m, w, h, 20, 40, 700);
+  assert.equal(photo[40 * w + 62], 1, 'щёлка закрашена');
+  assert.equal(photo[40 * w + 100], 0, 'соседняя большая область не тронута');
+  assert.equal(plain[40 * w + 100], 0);
+});
+
+test('рисованная картинка: тёмный контур и граница двух цветов — линии, области замкнуты, двойных линий нет', () => {
+  const w = 160, h = 120, R = new Uint8Array(w * h).fill(255), G = new Uint8Array(w * h).fill(255), B = new Uint8Array(w * h).fill(255);
+  const put = (i, c) => { R[i] = c[0]; G[i] = c[1]; B[i] = c[2]; };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const d = Math.hypot(x - 60, y - 60), i = y * w + x;
+    if (d < 36) put(i, [240, 160, 60]);            // рыжий круг
+    if (d >= 36 && d < 40) put(i, [43, 45, 66]);   // тёмный контур вокруг
+    if (d >= 35.5 && d < 36) put(i, [140, 100, 63]); // размытый край контура
+    if (x > 110 && x < 150 && y > 30 && y < 90) put(i, [250, 230, 200]); // светлый прямоугольник без контура
+  }
+  const m = artMask([R, G, B], w, h);
+  assert.equal(m[60 * w + 60], 0, 'середина круга чистая');
+  assert.equal(m[60 * w + 98], 1, 'контур — линия');
+  assert.equal(m[60 * w + 110], 1, 'граница двух светлых цветов — линия');
+  assert.equal(floodFill(m, w, h, 60, 60)[5 * w + 5], 0, 'круг замкнут');
+  assert.equal(floodFill(m, w, h, 130, 60)[5 * w + 5], 0, 'прямоугольник замкнут');
+  let runs = 0; for (let x = 61; x < 108; x++) if (m[60 * w + x] && !m[60 * w + x - 1]) runs++;
+  assert.equal(runs, 1, 'от середины круга до фона — одна линия, а не две');
+});
+
+test('рисованная картинка: большое тёмное пятно остаётся контуром с раскрашиваемой серединой, а тонкая линия — линией', () => {
+  const w = 200, h = 140, R = new Uint8Array(w * h).fill(255), G = new Uint8Array(w * h).fill(255), B = new Uint8Array(w * h).fill(255);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (Math.hypot(x - 60, y - 70) < 40 || (y > 68 && y < 73 && x > 120 && x < 190)) { R[i] = 43; G[i] = 45; B[i] = 66; } // чёрный круг и тонкая чёрная полоска
+  }
+  const m = artMask([R, G, B], w, h);
+  assert.equal(m[70 * w + 60], 0, 'середину чёрного круга можно красить');
+  assert.equal(m[70 * w + 22], 1, 'край круга — линия');
+  assert.equal(m[70 * w + 150], 1, 'тонкая полоска осталась линией');
+  const inside = floodFill(m, w, h, 60, 70);
+  assert.equal(inside[5 * w + 5], 0, 'круг замкнут');
 });

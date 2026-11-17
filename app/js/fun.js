@@ -12,6 +12,7 @@ import { BOOKS, bareWord } from './books.js';
 import { P } from './phrases.js';
 import { sfx, loadPack, prepare } from './audio.js';
 import { makeBoard } from './canvas.js';
+import { keepArt } from './album.js';
 import { renderTask } from './mechanics.js';
 import { heroSVG, starSVG } from './art.js';
 
@@ -45,7 +46,7 @@ export function freeDraw(x, back) {
   const { store, screen, ibtn, say } = x;
   const b = makeBoard({ brush: 16 });
   screen('level', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.freeDraw), 'speak')),
-    h('div', { class: 'task' }, h('div', { class: 'copy-top' }, h('div', { class: 'sample' }, '🎨'), h('button', { class: 'check', onclick: () => { if (b.ink() > 150) store.addArt(b.dataUrl()); sfx('star'); back(); } }, '✔')), b.el));
+    h('div', { class: 'task' }, h('div', { class: 'copy-top' }, h('div', { class: 'sample' }, '🎨'), h('button', { class: 'check', onclick: () => { if (b.ink() > 150) keepArt(store, b.dataUrl()); sfx('star'); back(); } }, '✔')), b.el));
   say(P.freeDraw);
 }
 
@@ -57,8 +58,8 @@ export function homeScreen(x, back) {
   const room = h('div', { class: 'room' });
   const tray = h('div', { class: 'tray2' });
   const draw = () => {
-    room.replaceChildren(h('div', { class: 'room-win' }, '🌤️'), h('div', { class: 'room-hero' }, hero('happy')), petImg(store, 'pet room-pet'),
-      ...HOME_ITEMS.filter((_, i) => home[i]).map(it => { const i = HOME_ITEMS.indexOf(it); return h('button', { class: 'placed' + (picked === i ? ' sel' : ''), style: `left:${home[i][0]}%;top:${home[i][1]}%`, 'aria-label': it[1], onclick: e => { e.stopPropagation(); picked = picked === i ? null : i; sfx('tap'); say(sayName(it[1])); draw(); } }, it[0]); }));
+    room.replaceChildren(...[h('div', { class: 'room-win' }, '🌤️'), h('div', { class: 'room-hero' }, hero('happy')), petImg(store, 'pet room-pet'),
+      ...HOME_ITEMS.filter((_, i) => home[i]).map(it => { const i = HOME_ITEMS.indexOf(it); return h('button', { class: 'placed' + (picked === i ? ' sel' : ''), style: `left:${home[i][0]}%;top:${home[i][1]}%`, 'aria-label': it[1], onclick: e => { e.stopPropagation(); picked = picked === i ? null : i; sfx('tap'); say(sayName(it[1])); draw(); } }, it[0]); })].filter(Boolean)); // если своего героя нет — пустое место пропускаем
     tray.replaceChildren(...HOME_ITEMS.map((it, i) => (stars >= it[2]
       ? h('button', { class: 'titem' + (picked === i ? ' sel' : '') + (home[i] ? ' used' : ''), 'aria-label': it[1], onclick: () => { picked = i; sfx('tap'); say(sayName(it[1])); draw(); } }, it[0])
       : h('button', { class: 'titem locked', 'aria-label': 'закрыто', onclick: () => say(P.homeNext(it[2] - stars)) }, h('span', {}, it[0]), h('small', { html: starSVG(true) + it[2] })))));

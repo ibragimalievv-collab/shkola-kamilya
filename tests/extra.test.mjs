@@ -1,5 +1,6 @@
 // ПРОВЕРКА 9. Слияние слогов, диктант на слух, свои слова, магазин, письма от Лумика.
 import test from 'node:test';
+import { readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { LEVELS } from '../app/js/curriculum.js';
 import { makeTask, checkTask, syllables } from '../app/js/tasks.js';
@@ -8,7 +9,9 @@ import { MAIL } from '../app/js/mail.js';
 import { bareWord } from '../app/js/books.js';
 import { stageOf, ORDER } from '../app/js/data.js';
 import { toyPrice } from '../app/js/extra.js';
-import { lineMask, floodFill, sketch, artMask } from '../app/js/photo.js';
+import { lineMask, floodFill, sketch, artMask, ink, examplePool } from '../app/js/photo.js';
+import { CRAFTS, craftSVG } from '../app/js/crafts.js';
+import { byMonth, monthName } from '../app/js/album.js';
 
 test('слияние: для каждого слога верный ответ — этот слог, и он один', () => {
   const r = makeRng(5);
@@ -179,4 +182,57 @@ test('рисованная картинка: большое тёмное пят�
   assert.equal(m[70 * w + 150], 1, 'тонкая полоска осталась линией');
   const inside = floodFill(m, w, h, 60, 70);
   assert.equal(inside[5 * w + 5], 0, 'круг замкнут');
+});
+
+test('раскраска по примерам: каждый пример действительно даёт ответ своей краски', () => {
+  const r = makeRng(11);
+  for (const kind of ['a5', 'am10', 'am20n']) {
+    const pool = examplePool(kind, r);
+    assert.ok(pool.size >= 3, `${kind}: разных ответов ${pool.size}`);
+    for (const [answer, list] of pool) for (const text of list) {
+      const m = /^(\d+)([+−])(\d+)$/.exec(text);
+      assert.ok(m, `непонятный пример ${text}`);
+      assert.equal(m[2] === '+' ? +m[1] + +m[3] : +m[1] - +m[3], answer, `${text} ≠ ${answer}`);
+    }
+  }
+});
+test('жирные контуры из фото: граница — сплошная линия, ровные места чистые, шум не превращается в линии', () => {
+  const w = 240, h = 180, g = new Float32Array(w * h);
+  let seed = 3; const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5) * 16;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) g[y * w + x] = (Math.hypot(x - 120, y - 90) < 55 ? 80 : 215) + rnd();
+  for (const level of [0, 1, 2]) {
+    const m = ink(g, w, h, level), share = m.reduce((a, b) => a + b, 0) / m.length;
+    assert.ok(share > 0.01 && share < 0.3, `уровень ${level}: линий ${(share * 100).toFixed(1)}%`);
+    assert.equal(m[10 * w + 10], 0, 'фон чистый');
+    assert.ok(m.every(v => v === 0 || v === 1), 'только чёрное и белое, без полутонов');
+    let hit = 0; for (let x = 120; x < 200; x++) hit += m[90 * w + x];
+    assert.ok(hit >= 2, 'край круга — линия');
+  }
+  assert.ok(ink(new Float32Array(w * h).fill(128), w, h, 1).every(v => v === 0), 'ровная картинка — пустой лист');
+});
+test('поделки: четыре штуки, у каждой не меньше пяти деталей', () => {
+  assert.deepEqual(CRAFTS.map(c => c[0]), ['rocket', 'mask', 'kite', 'dino']);
+  for (const [key, parts] of CRAFTS) { assert.ok(parts.length >= 5, key); assert.ok(craftSVG(key).startsWith('<svg') && craftSVG(key).includes(parts[0])); }
+});
+test('альбом по месяцам: свежие месяцы и рисунки первыми', () => {
+  const list = [{ id: 'a', d: '2026-09-30' }, { id: 'b', d: '2026-11-02' }, { id: 'c', d: '2026-11-15' }, { id: 'd', d: '2027-01-01' }];
+  const m = byMonth(list);
+  assert.deepEqual(m.map(x => x[0]), ['2027-01', '2026-11', '2026-09']);
+  assert.deepEqual(m[1][1].map(x => x.id), ['c', 'b']);
+  assert.equal(monthName('2026-11'), 'ноябрь 2026');
+});
+
+test('на экране не появляется слово «null»: пустые места не попадают в список того, что показать', () => {
+  const dir = new URL('../app/js/', import.meta.url);
+  for (const f of readdirSync(dir)) {
+    const text = readFileSync(new URL(f, dir), 'utf8');
+    let i = 0;
+    while ((i = text.indexOf('replaceChildren(', i)) >= 0) {
+      let depth = 0, j = i + 15;
+      for (; j < text.length; j++) { if (text[j] === '(') depth++; else if (text[j] === ')' && !--depth) break; }
+      const call = text.slice(i, j + 1);
+      assert.ok(!/: null|petImg\(/.test(call) || /filter\(/.test(call), `${f}: ${call.slice(0, 80)}`);
+      i = j;
+    }
+  }
 });

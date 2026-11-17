@@ -494,3 +494,27 @@ svg { display: block; width: 100%; height: 100%; }
 .ptiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .ptile { background: #f1f6ff; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; text-align: center; } .ptile b { font-size: 22px; } .ptile span { font-size: 13px; opacity: .75; }
 @media (max-width: 560px) { .ptabs { grid-template-columns: repeat(2, 1fr); } .ptab small { display: none; } }
+
+/* раскраска: лампочка, подписи красок, большой «шаг назад», видео, кубик, поделки, альбом по месяцам */
+.layer.hint { opacity: 0; } .layer.hint.on { animation: blink .5s 5; opacity: .9; }
+@keyframes blink { 0%, 100% { opacity: .15; } 50% { opacity: .95; } }
+.layer.replay { z-index: 3; background: #fff; }
+.color.keyed { width: clamp(52px, 11vmin, 78px); height: clamp(52px, 11vmin, 78px); display: grid; place-items: center; }
+.color.keyed b { background: #ffffffe6; border-radius: 99px; padding: .2em .5em; font-size: clamp(16px, 3.6vmin, 26px); color: var(--ink); }
+.color.keyed.sel { box-shadow: 0 0 0 .8vmin var(--ink); transform: scale(1.1); }
+.tool-btn.mode-btn { width: auto; padding: 0 1.6vmin; border-radius: 99px; font-weight: 800; font-size: 1em; min-width: clamp(44px, 7.5vmin, 60px); }
+.ibtn.undo { background: #ffd43b; }
+.video-row { margin-top: 1.5vmin; }
+.cube-scene { flex: 1; width: 100%; min-height: 50dvh; display: grid; place-items: center; perspective: 900px; touch-action: none; cursor: grab; }
+.cube { --s: min(56vmin, 340px); width: var(--s); height: var(--s); position: relative; transform-style: preserve-3d; }
+.cube .face { position: absolute; inset: 0; background: #fff center/contain no-repeat; border: .6vmin solid var(--ink); border-radius: 2vmin; backface-visibility: hidden; }
+.cube .front { transform: translateZ(calc(var(--s) / 2)); } .cube .back { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
+.cube .right { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); } .cube .left { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); }
+.cube .top { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); } .cube .bottom { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); }
+.craft-stage { width: min(100%, 52dvh); aspect-ratio: 1; background: #fff; border-radius: 3vmin; box-shadow: 0 0 0 .6vmin #dbe7ff; flex: none; } .craft-stage svg { width: 100%; height: 100%; }
+.craft-tray { display: flex; flex-wrap: wrap; gap: 2vmin; justify-content: center; }
+.craft-piece { width: clamp(72px, 17vmin, 120px); height: clamp(72px, 17vmin, 120px); background: #fff; border-radius: 3vmin; box-shadow: 0 .6vmin 0 #f59f00; padding: .6vmin; } .craft-piece svg { width: 100%; height: 100%; }
+.craft-piece.used { visibility: hidden; }
+.ready-pic.craft { box-shadow: 0 .6vmin 0 #f59f00; }
+.album-month { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 6px 0 12px; }
+.album-month figure { margin: 0; background: #f8f9fa; border-radius: 10px; padding: 4px; text-align: center; } .album-month img { width: 100%; border-radius: 6px; display: block; } .album-month figcaption { font-size: 12px; opacity: .7; }

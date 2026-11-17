@@ -7,6 +7,7 @@ import { say, hush, sfx, russianVoices, voicedNames } from './audio.js';
 import { P } from './phrases.js';
 import { penParent } from './pen.js';
 import { voiceStudio, clipCell } from './voice.js';
+import { albumCard } from './album.js';
 import { tokName } from './phrases.js';
 import { parentExtras } from './parent2.js';
 
@@ -119,7 +120,7 @@ function parentScreen(ctx) {
   const [check, summary, family, reading, remind, tools] = parentExtras({ store, again, app, placement: ctx.placement });
   const TABS = [
     ['📊 Успехи', 'что пройдено и где ошибки', [totals, weak, progress, summary, time]],
-    ['👦 Ребёнок', 'имя, свои слова, тетрадь, записи', [profiles, family, reading, penParent({ store, again, app }), tools]],
+    ['👦 Ребёнок', 'имя, альбом рисунков, свои слова, тетрадь', [profiles, albumCard(store), family, reading, penParent({ store, again, app }), tools]],
     ['🎙 Голос', 'записи и проверка слов', [voiceStudio(), check]],
     ['⚙️ Настройки', 'звук, лимит, острова, перенос', [settings, remind, islands, data]],
   ];

@@ -7,6 +7,7 @@ import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, 
 import { GIFT_COLORS, STORIES } from './stories.js';
 import { photoScreen } from './photo.js';
 import { countVisit } from './counter.js';
+import { keepArt } from './album.js';
 import { shopScreen, shopOpen, mailScreen, mailWaiting, duoScreen } from './extra.js';
 import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
@@ -210,7 +211,7 @@ function playLevel(level) {
       root, rng: r, islandN: level.island, locked: false, say,
       prompt(x) { prompt = x; say(x); },
       later: (fn, ms) => setTimeout(fn, ms),
-      saveArt: url => store.addArt(url),
+      saveArt: url => keepArt(store, url),
       saveRead, myPic: store.profile.pet?.img || null,
       saveWord: (u, text) => { const w = store.part('words', []); w.unshift({ u, t: text }); w.length = Math.min(w.length, 12); store.save(); },
       ok(delay = 1100) {
@@ -240,7 +241,7 @@ function playLevel(level) {
       },
     };
     const done = solved / (solved + queue.length + 1);
-    screen('level', h('div', { class: 'bar' }, twice(ibtn('🏠', 'выйти: нажать два раза', leave), () => sfx('miss')), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
+    screen('level', h('div', { class: 'bar' }, twice(ibtn('🏠', 'выйти: нажать два раза', leave), () => say(P.exitTwice)), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
       ibtn('🔊', 'послушать задание', () => say(prompt), 'speak')), root);
     mech = renderTask(t, c);
     say(t.say);

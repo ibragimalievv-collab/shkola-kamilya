@@ -39,8 +39,8 @@ export function clipCell(key, label, changed = () => {}) {
   const el = h('div', { class: 'clip' });
   const draw = () => {
     const b = h('button', { class: 'pbtn rec' + (hasClip(key) ? ' on' : ''), title: 'Нажмите, скажите, нажмите ещё раз', onclick: () => toggle(key, b, () => { draw(); changed(); }) }, label);
-    el.replaceChildren(b, hasClip(key) ? h('button', { class: 'pbtn mini', 'aria-label': 'прослушать', onclick: () => playClip(key) }, '▶') : null,
-      hasClip(key) ? h('button', { class: 'pbtn mini warn', 'aria-label': 'удалить запись', onclick: async () => { await deleteClip(key); draw(); changed(); } }, '✕') : null);
+    el.replaceChildren(...[b, hasClip(key) ? h('button', { class: 'pbtn mini', 'aria-label': 'прослушать', onclick: () => playClip(key) }, '▶') : null,
+      hasClip(key) ? h('button', { class: 'pbtn mini warn', 'aria-label': 'удалить запись', onclick: async () => { await deleteClip(key); draw(); changed(); } }, '✕') : null].filter(Boolean)); // пустые места пропускаем, иначе на экране появится слово «null"
   };
   draw();
   return el;

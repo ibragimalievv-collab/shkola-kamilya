@@ -9,7 +9,8 @@ import { MAIL } from '../app/js/mail.js';
 import { bareWord } from '../app/js/books.js';
 import { stageOf, ORDER } from '../app/js/data.js';
 import { toyPrice } from '../app/js/extra.js';
-import { lineMask, floodFill, sketch, artMask, ink, examplePool } from '../app/js/photo.js';
+import { lineMask, floodFill, sketch, artMask, ink, examplePool, levels } from '../app/js/photo.js';
+import { PICTURES, pictureSVG } from '../app/js/pictures.js';
 import { CRAFTS, craftSVG } from '../app/js/crafts.js';
 import { byMonth, monthName } from '../app/js/album.js';
 
@@ -235,4 +236,30 @@ test('на экране не появляется слово «null»: пуст�
       i = j;
     }
   }
+});
+
+test('картинки для раскраски по буквам и примерам: десять штук, много участков, цвета не спутать', () => {
+  assert.equal(PICTURES.length, 10);
+  const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  for (const [key, parts] of PICTURES) {
+    assert.ok(parts.length >= 8, `${key}: участков ${parts.length}`);
+    const colors = [...new Set(parts.flatMap(p => [...p.matchAll(/fill="(#[0-9a-f]{6})"/g)].map(m => m[1])))].filter(c => c !== '#2b2d42');
+    assert.ok(colors.length >= 5, `${key}: цветов ${colors.length}`);
+    for (const c of colors) assert.ok(Math.min(...rgb(c)) <= 232, `${key}: ${c} слишком светлый — такой участок не раскрашивается`);
+    for (let i = 0; i < colors.length; i++) for (let j = i + 1; j < colors.length; j++) {
+      const a = rgb(colors[i]), b = rgb(colors[j]);
+      assert.ok(Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) >= 50, `${key}: цвета ${colors[i]} и ${colors[j]} слишком похожи`);
+    }
+    assert.ok(pictureSVG(key).startsWith('<svg'));
+  }
+});
+test('выравнивание яркости: тёмный блёклый снимок растягивается на весь диапазон и осветляется', () => {
+  const n = 1000, dark = new Float32Array(n);
+  for (let i = 0; i < n; i++) dark[i] = 20 + (i / n) * 50; // всё между 20 и 70 — тёмная комната
+  const out = levels(dark), sorted = [...out].sort((a, b) => a - b);
+  assert.ok(sorted[10] < 20 && sorted[n - 10] > 235, 'занят весь диапазон');
+  assert.ok(sorted[n >> 1] > 100, 'середина осветлена');
+  for (let i = 1; i < n; i++) assert.ok(out[i] >= out[i - 1], 'порядок яркостей не нарушен');
+  const fine = new Float32Array(n); for (let i = 0; i < n; i++) fine[i] = (i / n) * 255;
+  const same = levels(fine); assert.ok(Math.abs(same[500] - fine[500]) < 14, 'нормальный снимок почти не меняется');
 });

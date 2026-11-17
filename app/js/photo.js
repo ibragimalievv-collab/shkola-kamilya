@@ -15,6 +15,7 @@ import { lettersKnown } from './fun.js';
 import { HERO_DEFAULT } from './store.js';
 import { keepArt } from './album.js';
 import { CRAFTS, craftSVG, craftScreen } from './crafts.js';
+import { PICTURES, pictureSVG } from './pictures.js';
 
 const KEEP = 12;   // сколько раскрасок храним
 const SIDE = 720;  // длинная сторона листа в точках
@@ -172,6 +173,10 @@ export function artMask(rgb, w, h) {
     const r = x < w - 1 ? fix[i + 1] : a, d = y < h - 1 ? fix[i + w] : a;
     if ((r !== a && !isDark[r]) || (d !== a && !isDark[d])) edge[i] = 1; // граница двух светлых цветов — рисуем линию сами
   }
+  // Рядом с тёмным контуром своих линий не добавляем: там размытый край контура похож на «ещё один цвет»,
+  // и на круглых линиях вырастали бы шишечки.
+  const nearDark = grow(darkAll, w, h, 4);
+  for (let i = 0; i < n; i++) if (nearDark[i]) edge[i] = 0;
   // Тёмное пятно (чёрная голова пингвина, маска енота) не должно оставаться сплошной кляксой: оставляем от него
   // только контур, а середину можно раскрашивать. Тонкие контуры и зрачки остаются как есть.
   const light = new Uint8Array(n);
@@ -183,6 +188,9 @@ export function artMask(rgb, w, h) {
   const inner = grow(core, w, h, deep - Math.max(3, Math.round(w * 0.008))); // середина тёмного пятна; по краю остаётся контур
   const mask = new Uint8Array(n), thick = grow(edge, w, h, darkN < n * 0.01 ? 3 : 2); // если тёмных контуров почти нет (помощник) — линии потолще
   for (let i = 0; i < n; i++) if ((darkAll[i] && !inner[i]) || thick[i]) mask[i] = 1;
+  // Сглаживаем края линий: слегка размываем маску и снова делаем её чёткой — зазубрины пропадают.
+  const smooth = blur(blur(Float32Array.from(mask), w, h, 1), w, h, 1);
+  for (let i = 0; i < n; i++) mask[i] = smooth[i] > 0.5 ? 1 : 0;
   return mask;
 }
 
@@ -203,6 +211,19 @@ export function sketch(gray, w, h, level = 1) {
   for (let i = 0; i < out.length; i++) out[i] = 255 * (1 - v[i] ** power);
   return out;
 }
+// Выровнять яркость снимка перед обработкой: тёмный или блёклый снимок растягивается на весь диапазон от чёрного
+// до белого, а слишком тёмный ещё и осветляется. Без этого на снимках, сделанных в комнате вечером, линий почти нет.
+export function levels(gray) {
+  const hist = new Uint32Array(256), n = gray.length;
+  for (let i = 0; i < n; i++) hist[Math.max(0, Math.min(255, Math.round(gray[i])))]++;
+  const at = share => { let sum = 0; for (let v = 0; v < 256; v++) { sum += hist[v]; if (sum >= n * share) return v; } return 255; };
+  const lo = at(0.02), hi = Math.max(lo + 1, at(0.98)), mid = Math.max(1, Math.min(254, ((at(0.5) - lo) / (hi - lo)) * 255));
+  const gamma = mid < 105 ? Math.max(0.55, Math.log(0.45) / Math.log(mid / 255)) : 1; // тёмный снимок — осветляем середину
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = 255 * Math.min(1, Math.max(0, (gray[i] - lo) / (hi - lo))) ** gamma;
+  return out;
+}
+
 // ЖИРНЫЕ КОНТУРЫ из фотографии — без теней и полутонов, как в книжке-раскраске. gray — яркость точек.
 // Берём тот же приём, что и для карандаша (точка темнее своих соседей — значит, это черта), но оставляем только
 // самые заметные черты, выбрасываем мелкий сор, а оставшееся делаем сплошным и чуть толще. Возвращает маску: 1 — линия.
@@ -380,7 +401,7 @@ export function photoScreen(x, back, note) {
   const pick = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: take });
   const shelf = h('div', { class: 'shelf' });
   screen('library', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.photoHello), 'speak')),
-    h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => cam.click(), 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => pick.click(), 'play')), cam, pick, shelf);
+    h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => { say(P.photoTip); cam.click(); }, 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => pick.click(), 'play')), cam, pick, shelf);
   list.forEach(async it => {
     const btn = h('button', { class: 'book page-thumb', 'aria-label': 'раскраска', onclick: () => { sfx('tap'); openPage(x, it.id, again); } });
     shelf.append(btn);
@@ -394,7 +415,10 @@ export function photoScreen(x, back, note) {
   const crafts = h('div', { class: 'ready-row' }, CRAFTS.map(([key]) => h('button', { class: 'ready-pic craft', 'aria-label': 'поделка', html: craftSVG(key),
     onclick: () => { sfx('tap'); const open = async () => { try { openPage(x, await addArtPage(store, 'craft-' + key, craftSVG(key)), again); } catch { say(P.photoFail); } };
       store.part('colorings', []).some(it => it.art === 'craft-' + key) ? open() : craftScreen(x, key, () => again(), open); } })));
-  shelf.after(row, crafts);
+  // Картинки, нарисованные для раскраски по буквам и примерам (много участков и цветов).
+  const pics = h('div', { class: 'ready-row' }, PICTURES.map(([key]) => h('button', { class: 'ready-pic pic', 'aria-label': 'картинка для раскраски по буквам и примерам', html: pictureSVG(key),
+    onclick: async () => { sfx('tap'); try { openPage(x, await addArtPage(store, 'pic-' + key, pictureSVG(key)), again); } catch { say(P.photoFail); } } })));
+  shelf.after(pics, row, crafts);
   say(note || P.photoHello);
 }
 
@@ -438,6 +462,7 @@ async function openPage(x, id, back) {
   fg.drawImage(bmp, 0, 0, W, H);
   const fpx = fg.getImageData(0, 0, W, H).data, gray = new Float32Array(W * H);
   for (let i = 0; i < gray.length; i++) gray[i] = 0.3 * fpx[i * 4] + 0.59 * fpx[i * 4 + 1] + 0.11 * fpx[i * 4 + 2];
+  const lit = photo ? levels(gray) : gray; // для линий снимок выравнивается по яркости
   // Сглаженные цвета картинки — для волшебной палочки (мягко, без зерна фотографии).
   const soft = [0, 1, 2].map(c => { const a = new Float32Array(W * H); for (let i = 0; i < a.length; i++) a[i] = fpx[i * 4 + c]; return item.art ? a : blur(blur(a, W, H, 3), W, H, 3); });
   let mask = null;
@@ -467,8 +492,8 @@ async function openPage(x, id, back) {
     const img = lg.createImageData(W, H), d = img.data;
     let a;
     if (item.art || !item.v) a = mask.map(v => (v ? 255 : 0));                       // готовая картинка: её контуры
-    else if ((item.style || 'ink') === 'ink') a = ink(gray, W, H, item.lv ?? 1).map(v => (v ? 255 : 0)); // фото: жирные контуры без теней
-    else a = sketch(gray, W, H, item.lv ?? 1);                                          // фото: карандашный рисунок
+    else if ((item.style || 'ink') === 'ink') a = ink(lit, W, H, item.lv ?? 1).map(v => (v ? 255 : 0)); // фото: жирные контуры без теней
+    else a = sketch(lit, W, H, item.lv ?? 1);                                          // фото: карандашный рисунок
     for (let i = 0; i < W * H; i++) { d[i * 4] = 43; d[i * 4 + 1] = 45; d[i * 4 + 2] = 66; d[i * 4 + 3] = a[i]; }
     lg.putImageData(img, 0, 0);
   };
@@ -649,7 +674,7 @@ async function openPage(x, id, back) {
 
   // --- панели кнопок ---
   const pickOne = (box, cls, el) => box.querySelectorAll('.' + cls).forEach(q => q.classList.toggle('sel', q === el));
-  const colors = h('div', { class: 'board-tools' }), gamePal = h('div', { class: 'board-tools' }), tools = h('div', { class: 'board-tools' }), extra = h('div', { class: 'board-tools' });
+  const colors = h('div', { class: 'board-tools' }), gamePal = h('div', { class: 'board-tools' }), tools = h('div', { class: 'board-tools' });
   COLORS.forEach((c, i) => { const b = h('button', { class: 'color' + (i ? '' : ' sel') + (c === '#ffffff' ? ' white' : c === 'rainbow' ? ' rainbow' : ''), style: c === 'rainbow' ? '' : `background:${c}`, 'aria-label': 'цвет', onclick: () => { color = c; pickOne(colors, 'color', b); if (tool === 'erase' || tool === 'magic' || tool === 'stamp') setTool('fill'); } }); colors.append(b); });
   function drawPalette() { // цвета с подписями: буква или число
     gamePal.replaceChildren(...palette.map((c, i) => { const b = h('button', { class: 'color keyed', style: `background:${hex(c)}`, 'aria-label': 'цвет с подписью', onclick: () => { chosen = i; pickOne(gamePal, 'keyed', b); sfx('tap'); say(game === 'abc' ? tokL(keys[i]) : String(keys[i])); } }, h('b', {}, String(keys[i]))); return b; }));
@@ -659,26 +684,30 @@ async function openPage(x, id, back) {
   STAMPS.forEach((e, i) => { const b = h('button', { class: 'tool-btn stamp-btn' + (i ? '' : ' sel'), 'aria-label': 'наклейка', onclick: () => { stamp = e; pickOne(stamps, 'stamp-btn', b); sfx('tap'); } }, e); stamps.append(b); });
   const sizes = h('span', { class: 'sizes off' });
   const setTool = t => { tool = t; for (const [k, b] of Object.entries(toolBtns)) b.classList.toggle('sel', k === t); sizes.classList.toggle('off', t === 'fill' || t === 'magic'); stamps.classList.toggle('hidden-row', t !== 'stamp'); };
-  for (const [t, icon, label] of [['fill', '🪣', 'заливка'], ['brush', '🖌️', 'кисть'], ['magic', '🪄', 'волшебная палочка: цвет как на картинке'], ['stamp', '⭐', 'наклейки'], ['erase', '🧽', 'ластик']])
-    tools.append(toolBtns[t] = h('button', { class: 'tool-btn' + (t === 'fill' ? ' sel' : ''), 'aria-label': label, onclick: () => { sfx('tap'); setTool(t); } }, icon));
+  // На виду — только главное: заливка, кисть, ластик (большой «шаг назад» — вверху). Остальное — под кнопкой «ещё».
+  const more = h('div', { class: 'board-tools more-row hidden-row' }), modes = h('div', { class: 'board-tools' });
+  const tool3 = (t, icon, label) => (toolBtns[t] = h('button', { class: 'tool-btn' + (t === 'fill' ? ' sel' : ''), 'aria-label': label, onclick: () => { sfx('tap'); setTool(t); } }, icon));
+  tools.append(tool3('fill', '🪣', 'заливка'), tool3('brush', '🖌️', 'кисть'), tool3('erase', '🧽', 'ластик'), sizes);
   [[12, 's'], [26, 'm'], [46, 'l']].forEach(([sz, k]) => { const b = h('button', { class: `size size-${k}` + (sz === size ? ' sel' : ''), 'aria-label': 'толщина кисти', onclick: () => { size = sz; pickOne(sizes, 'size', b); } }, h('i')); sizes.append(b); });
-  tools.append(sizes, h('button', { class: 'tool-btn', 'aria-label': 'вернуть', onclick: stepForward }, '↪️'));
-  // Вторая строка: режимы (для готовых картинок), вид рисунка (для фото), печать, видео, 3D.
+  const moreBtn = h('button', { class: 'tool-btn more-btn', 'aria-label': 'ещё', onclick: () => { sfx('tap'); more.classList.toggle('hidden-row'); moreBtn.classList.toggle('sel', !more.classList.contains('hidden-row')); } }, '➕');
+  more.append(tool3('magic', '🪄', 'волшебная палочка: цвет как на картинке'), tool3('stamp', '⭐', 'наклейки'), h('button', { class: 'tool-btn', 'aria-label': 'вернуть', onclick: stepForward }, '↪️'));
   const modeBtns = {};
   if (item.art) for (const [m, label, aria] of [[null, '🎨', 'раскрашивать как хочу'], ['abc', 'АБВ', 'раскраска по буквам'], ['num', '1+2', 'раскраска по примерам']])
-    extra.append(modeBtns[m] = h('button', { class: 'tool-btn mode-btn', 'aria-label': aria, onclick: () => { sfx('tap'); m ? gameStart(m) : gameStop(); } }, label));
+    modes.append(modeBtns[m] = h('button', { class: 'tool-btn mode-btn', 'aria-label': aria, onclick: () => { sfx('tap'); m ? gameStart(m) : gameStop(); } }, label));
   if (photo) {
     const styleBtn = h('button', { class: 'tool-btn', 'aria-label': 'жирные контуры или карандаш', onclick: () => { item.style = (item.style || 'ink') === 'ink' ? 'pencil' : 'ink'; store.save(); setLines(); styleBtn.textContent = item.style === 'ink' ? '🖊️' : '✏️'; sfx('tap'); } }, (item.style || 'ink') === 'ink' ? '🖊️' : '✏️');
     const lv = h('span', { class: 'sizes' });
     [0, 1, 2].forEach(n => { const b = h('button', { class: 'tool-btn lines-btn' + (n === (item.lv ?? 1) ? ' sel' : ''), 'aria-label': ['мало линий', 'средне линий', 'много линий'][n], onclick: () => { item.lv = n; store.save(); setLines(); pickOne(lv, 'lines-btn', b); sfx('tap'); } }, h('span', { class: 'lv lv' + n })); lv.append(b); });
-    extra.append(styleBtn, lv);
+    more.append(styleBtn, lv);
   }
-  extra.append(h('button', { class: 'tool-btn', 'aria-label': 'распечатать', onclick: () => print() }, '🖨️'),
+  more.append(h('button', { class: 'tool-btn', 'aria-label': 'распечатать', onclick: () => print() }, '🖨️'),
     h('button', { class: 'tool-btn', 'aria-label': 'видео: как я рисовал', onclick: () => replay() }, '🎬'),
     h('button', { class: 'tool-btn', 'aria-label': 'объёмный рисунок', onclick: () => cube() }, '🧊'));
+  (item.art ? modes : tools).append(moreBtn);
   function setRows() { // в игре вместо обычных красок — краски с подписями, а кисти спрятаны
     colors.classList.toggle('hidden-row', !!game); tools.classList.toggle('hidden-row', !!game); gamePal.classList.toggle('hidden-row', !game);
-    if (game) stamps.classList.add('hidden-row');
+    for (const t of ['magic', 'stamp']) toolBtns[t].classList.toggle('hidden-row', !!game); // в игре палочка и наклейки не нужны
+    if (game) { stamps.classList.add('hidden-row'); if (tool === 'magic' || tool === 'stamp') setTool('fill'); }
     for (const [m, b] of Object.entries(modeBtns)) b.classList.toggle('sel', String(game) === m);
   }
 
@@ -747,7 +776,7 @@ async function openPage(x, id, back) {
       else if (op.t === 'stamp') steps.push(() => doStamp(rg, op));
       else { let clip; for (let i = 0; i < op.pts.length; i += 3) steps.push(() => { if (clip === undefined) clip = clipOf(op); for (let j = i; j < Math.min(op.pts.length, i + 3); j++) doSeg(rg, op, j, clip); }); }
     }
-    const per = Math.max(1, Math.ceil(steps.length / 280)), wait = Math.max(34, Math.min(160, 10000 / Math.ceil(steps.length / per)));
+    const per = Math.max(1, Math.ceil(steps.length / 280)), wait = Math.max(34, Math.min(900, 9000 / Math.ceil(steps.length / per))); // всё видео — около десяти секунд
     frame(); stage.append(view);
     let rec = null; const chunks = [];
     try {
@@ -756,7 +785,7 @@ async function openPage(x, id, back) {
     } catch { rec = null; }
     say(P.videoPlay);
     for (let i = 0; i < steps.length; i += per) { for (let j = i; j < Math.min(steps.length, i + per); j++) steps[j](); frame(); await sleep(wait); }
-    for (let i = 0; i < 20; i++) { frame(); await sleep(50); } // секунда на готовый рисунок
+    for (let i = 0; i < 30; i++) { frame(); await sleep(50); } // полторы секунды на готовый рисунок
     sfx('star');
     if (rec) {
       const blob = await new Promise(ok => { rec.onstop = () => ok(new Blob(chunks, { type: rec.mimeType })); rec.stop(); });
@@ -795,7 +824,7 @@ async function openPage(x, id, back) {
   screen('level', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), h('span', { class: 'grow' }),
     ibtn('💡', 'подсказка: что ещё не закрашено', bulb), ibtn('↩️', 'шаг назад', stepBack, 'undo'),
     h('button', { class: 'check', 'aria-label': 'готово', onclick: finish }, '✔'), ibtn('🔊', 'послушать', () => say(game === 'abc' ? P.gameAbc : game === 'num' ? P.gameNum : P.photoReady), 'speak')),
-  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, stamps, tools, extra)));
+  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, stamps, tools, modes, more)));
   setRows();
   if (!saved) keep();
   if (item.art && item.game) gameStart(item.game); else say(P.photoReady);

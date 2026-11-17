@@ -120,7 +120,7 @@ function parentScreen(ctx) {
   const [check, summary, family, reading, remind, tools] = parentExtras({ store, again, app, placement: ctx.placement });
   const TABS = [
     ['📊 Успехи', 'что пройдено и где ошибки', [totals, weak, progress, summary, time]],
-    ['👦 Ребёнок', 'имя, альбом рисунков, свои слова, тетрадь', [profiles, albumCard(store), family, reading, penParent({ store, again, app }), tools]],
+    ['👦 Ребёнок', 'имя, альбом рисунков, свои слова, тетрадь', [profiles, albumCard(store, again), family, reading, penParent({ store, again, app }), tools]],
     ['🎙 Голос', 'записи и проверка слов', [voiceStudio(), check]],
     ['⚙️ Настройки', 'звук, лимит, острова, перенос', [settings, remind, islands, data]],
   ];

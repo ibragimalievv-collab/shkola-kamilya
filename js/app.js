@@ -220,7 +220,8 @@ function islandPainting(isl, back) {
 }
 
 function startColoringTrial() {
-  const drawings = new Map(), island = ISLANDS[0], art = ARTWORK[0];
+  const drawings = new Map(), island = ISLANDS[0];
+  const art = ARTWORK.find(item => item.id === params.get('art')) ?? ARTWORK[0];
   const media = {
     get: async (_, key) => drawings.get(key),
     put: async (_, key, blob) => { drawings.set(key, blob); },

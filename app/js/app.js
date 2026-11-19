@@ -176,7 +176,7 @@ async function openIslandReward(isl, back) {
   chooseIslandArt(isl, back, options);
 }
 
-function chooseIslandArt(isl, back, options) {
+function chooseIslandArt(isl, back, options, note) {
   const input = h('input', { type: 'file', accept: LINE_ART_TYPES, hidden: true, onchange: async e => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file || own.disabled) return;
@@ -197,17 +197,24 @@ function chooseIslandArt(isl, back, options) {
   }, h('img', { src: art.src, alt: '', loading: 'lazy' }), h('span', {}, art.title))));
   screen('library', h('div', { class: 'bar' }, ibtn('◀', 'к острову', back)),
     h('h1', { class: 'artwork-title' }, 'Выбери раскраску'),
-    own, input, h('small', {}, 'Твой файл остаётся на этом устройстве.'), gallery);
+    own, input, note && h('p', { class: 'paint-feedback', role: 'status' }, note),
+    h('small', {}, 'Твой файл остаётся на этом устройстве.'), gallery);
 }
 
 function islandPainting(isl, back) {
-  return {
+  const options = {
     island: isl, onDraft: page => { store.part('rewardPaintings', {})[isl.id] = page; store.save(); },
+    onUnavailable: (page, note) => {
+      const drafts = store.part('rewardPaintings', {});
+      if (drafts[isl.id] === page) { delete drafts[isl.id]; store.save(); }
+      chooseIslandArt(isl, back, options, note);
+    },
     onBuild: async drawing => {
       await saveAssemblyPicture(store, isl, drawing);
       await assemblyScreen(X, isl, drawing, back);
     },
   };
+  return options;
 }
 
 function islandReward(isl, back, compact = false) {

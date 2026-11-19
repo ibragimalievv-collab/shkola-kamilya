@@ -5,6 +5,8 @@ import { ISLANDS } from '../app/js/curriculum.js';
 import { assemblyQuestion, islandRewardOpen } from '../app/js/assembly.js';
 import { reliefLayout, RELIEF_PARTS } from '../app/js/relief.js';
 import { exportProfileFile, readProfileFile, restoreProfileFile, transferLink, readProfileLink } from '../app/js/transfer.js';
+import { groupPaints, guidePaint, targetPaint } from '../app/js/paint-game.js';
+import { illustrationMask, floodFill } from '../app/js/photo.js';
 
 const createLocal = () => {
   const values = new Map();
@@ -47,6 +49,37 @@ test('30 фигурных частей покрывают весь исходн�
     const task = assemblyQuestion(island, step, 5);
     assert.equal(task.options.filter(option => option === task.target).length, 1);
   }
+});
+
+test('подписи держат расстояние, а мелкие участки остаются в раскраске', () => {
+  const regions = [
+    { k: 0, pi: 0, x: 55, y: 50, room: 24, size: 800, text: 'А' },
+    { k: 1, pi: 0, x: 62, y: 51, room: 12, size: 130, text: 'А' },
+    { k: 2, pi: 1, x: 140, y: 50, room: 22, size: 420, text: 'М' },
+  ];
+  const guide = guidePaint(regions, 250), ids = new Int32Array(250 * 100).fill(-1);
+  ids[51 * 250 + 62] = 1;
+  ids[50 * 250 + 130] = 9;
+  assert.deepEqual(guide.map(g => g.k), [0, 2]);
+  assert.deepEqual(guide[0].details.map(g => g.k), [1]);
+  assert.equal(targetPaint(guide, ids, 250, 100, 62, 51, 4, 8)?.k, 0);
+  assert.equal(targetPaint(guide, ids, 250, 100, 130, 50, 4, 12), undefined);
+  const colors = [[240, 169, 55], [252, 174, 43], [50, 171, 221]];
+  assert.deepEqual(groupPaints(colors, regions.map((g, pi) => ({ ...g, pi, size: 400 - pi * 100 })), 2, true).palette, [colors[0], colors[2]]);
+});
+
+test('контуры иллюстрации сохраняют обводку и пропускают плавные переходы', () => {
+  const w = 160, h = 100;
+  const channels = [0, 1, 2].map(c => Uint8Array.from({ length: w * h }, (_, i) => {
+    const x = i % w, y = Math.floor(i / w);
+    const inFrame = x >= 35 && x < 125 && y >= 20 && y < 80;
+    const outline = inFrame && (x < 39 || x >= 121 || y < 24 || y >= 76);
+    return outline ? 21 : [118, 185, 244][c] - Math.floor(x / 8);
+  }));
+  const mask = illustrationMask(channels, w, h);
+  assert.equal(mask[50 * w + 15], 0);
+  assert.equal(mask[50 * w + 36], 1);
+  assert.equal(floodFill(mask, w, h, 70, 50)[50 * w + 15], 0);
 });
 
 test('перенос переносит рисунки и сохранение сборки только выбранного ребёнка', async () => {

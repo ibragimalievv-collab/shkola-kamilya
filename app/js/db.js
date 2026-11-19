@@ -27,4 +27,14 @@ export const idb = {
   put: (store, key, value) => run(store, 'readwrite', s => s.put(value, key)),
   del: (store, key) => run(store, 'readwrite', s => s.delete(key)),
   keys: store => run(store, 'readonly', s => s.getAllKeys()),
+  async putBatch(records) {
+    if (!records.length) return;
+    const db = await open();
+    return new Promise((ok, fail) => {
+      const tx = db.transaction([...new Set(records.map(r => r.store))], 'readwrite');
+      tx.oncomplete = () => ok();
+      tx.onabort = () => fail(tx.error || new Error('Запись прервана'));
+      for (const { store, key, blob } of records) tx.objectStore(store).put(blob, key);
+    });
+  },
 };

@@ -54,7 +54,22 @@ export function createStore(storage, now = () => today()) {
       return id;
     },
     switchProfile(id) { if (state.profiles[id]) { state.current = id; save(); } },
-    resetProfile() { state.profiles[state.current] = newProfile(p().name); save(); },
+    profileForLink(linkId) { return Object.keys(state.profiles).find(id => state.profiles[id].linkId === linkId); },
+    ensureProfileLink() { p().linkId ||= globalThis.crypto.randomUUID().replaceAll('-', ''); save(); return p().linkId; },
+    restoreProfile(profile) {
+      const match = api.profileForLink(profile.linkId), id = match || 'p-' + profile.linkId;
+      const previous = match ? state.profiles[match] : null;
+      const levels = { ...profile.levels };
+      for (const [level, stars] of Object.entries(previous?.levels || {})) levels[level] = Math.max(levels[level] || 0, stars);
+      const next = { ...state, current: id, profiles: { ...state.profiles, [id]: { ...profile, levels } } };
+      storage.setItem(KEY, JSON.stringify(next));
+      state = next;
+    },
+    resetProfile() {
+      const { name, linkId } = p();
+      state.profiles[state.current] = { ...newProfile(name), ...(linkId ? { linkId } : {}) };
+      save();
+    },
     removeProfile(id) {
       if (Object.keys(state.profiles).length < 2) return;
       delete state.profiles[id];

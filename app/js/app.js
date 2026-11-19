@@ -5,7 +5,12 @@ import { h, makeRng, today, twice } from './util.js';
 import { idb } from './db.js';
 import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { GIFT_COLORS, STORIES } from './stories.js';
-import { photoScreen } from './photo.js';
+import { photoScreen, openArtwork, openLocalArtwork, resumeArtwork, LINE_ART_TYPES } from './photo.js';
+import { ARTWORK, artForIsland } from './artwork.js';
+import { readInvitation } from './pair.js';
+import { readProfileLink, transferLink } from './transfer.js';
+import { showTransferReceiver } from './transfer-screen.js';
+import { islandRewardOpen, islandAssembly, loadAssemblyPicture, saveAssemblyPicture, assemblyScreen, BLOCK_COUNT } from './assembly.js';
 import { countVisit } from './counter.js';
 import { keepArt } from './album.js';
 import { shopScreen, shopOpen, mailScreen, mailWaiting, duoScreen } from './extra.js';
@@ -121,7 +126,8 @@ function map() {
       'aria-label': isl.title, onclick: () => { sfx('tap'); open ? island(isl) : say(P.islandLocked); } },
       h('span', { class: 'inum' }, isl.n + 1),
       h('span', { html: islandSVG(isl.line, !open) }),
-      done ? h('span', { class: 'isticker', html: animalSVG(isl.n) }) : !open ? h('span', { class: 'lock' }, '🔒') : null,
+      islandRewardOpen(store, isl) ? h('img', { class: 'isticker reward-thumb', src: artForIsland(isl).src, alt: '' })
+        : !open ? h('span', { class: 'lock' }, '🔒') : null,
       next && next.island === isl.n ? h('span', { class: 'boat', html: heroSVG(store.profile.hero, 'happy') }) : null,
       next && next.island === isl.n ? petImg(store, 'pet onmap') : null,
       h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` })));
@@ -138,13 +144,13 @@ function map() {
       ibtn('📚', 'книжки', () => library(X, map), booksOpen(store) > Object.keys(store.part('books', {})).length ? 'badge' : ''),
       ibtn('🏠', 'домик', () => homeScreen(X, map), fresh ? 'badge' : ''),
       ibtn('✍️', 'пишу ручкой', () => penScreen({ store, app, back: map, hero }), pens ? 'badge' : ''),
-      ibtn('🏆', 'мои наклейки и рисунки', collection)),
+      ibtn('🏆', 'мои объёмные рисунки', collection)),
 
     h('div', { class: 'bar places' },
       ibtn('✉️', 'письма от Лумика', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
       ibtn('🛒', 'магазин игрушек', () => shopScreen(X, map), shopOpen(store) ? '' : 'dim'),
       ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map)),
-      ibtn('📷', 'раскрась фото', () => photoScreen(X, map)),
+      ibtn('🎨', 'раскраски', () => photoScreen(X, map)),
       // Кнопка для взрослых — с подписью, чтобы родители сразу видели, куда им заходить (внутри — задачка на умножение).
       h('button', { class: 'parent-btn', 'aria-label': 'настройки для родителей', onclick: () => { sfx('tap'); openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }); } },
         h('span', {}, '⚙️'), h('span', { class: 'parent-txt' }, h('b', {}, 'Настройки'), h('small', {}, 'для родителей')))),
@@ -155,16 +161,87 @@ function map() {
 }
 
 // ---------- один остров: дорожка из уровней ----------
+function localIslandDraft(isl) {
+  const draft = store.profile.rewardPaintings?.[isl.id];
+  return store.profile.colorings?.find(item => item.id === draft)?.id;
+}
+
+async function openIslandReward(isl, back) {
+  if (!islandRewardOpen(store, isl)) return;
+  const picture = await loadAssemblyPicture(store, isl);
+  if (picture) return assemblyScreen(X, isl, picture, back);
+  const options = islandPainting(isl, back);
+  const draft = localIslandDraft(isl);
+  if (draft) return resumeArtwork(X, draft, back, options);
+  chooseIslandArt(isl, back, options);
+}
+
+function chooseIslandArt(isl, back, options) {
+  const input = h('input', { type: 'file', accept: LINE_ART_TYPES, hidden: true, onchange: async e => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file || own.disabled) return;
+    own.disabled = true;
+    try { await openLocalArtwork(X, file, back, options); } finally { own.disabled = false; }
+  } });
+  const own = h('button', { type: 'button', class: 'reward-action', onclick: () => input.click() }, 'Загрузить одно фото или раскраску');
+  const main = artForIsland(isl);
+  const gallery = h('div', { class: 'artwork-shelf' }, [main, ...ARTWORK.filter(a => a !== main)].map(art => h('button', {
+    class: 'artwork-card', type: 'button',
+    onclick: async e => {
+      if (own.disabled) return;
+      own.disabled = true;
+      const selected = e.currentTarget;
+      selected.disabled = true;
+      try { await openArtwork(X, art, back, options); } finally { own.disabled = false; selected.disabled = false; }
+    },
+  }, h('img', { src: art.src, alt: '', loading: 'lazy' }), h('span', {}, art.title))));
+  screen('library', h('div', { class: 'bar' }, ibtn('◀', 'к острову', back)),
+    h('h1', { class: 'artwork-title' }, 'Выбери раскраску'),
+    own, input, h('small', {}, 'Твой файл остаётся на этом устройстве.'), gallery);
+}
+
+function islandPainting(isl, back) {
+  return {
+    island: isl, onDraft: page => { store.part('rewardPaintings', {})[isl.id] = page; store.save(); },
+    onBuild: async drawing => {
+      await saveAssemblyPicture(store, isl, drawing);
+      await assemblyScreen(X, isl, drawing, back);
+    },
+  };
+}
+
+function islandReward(isl, back, compact = false) {
+  const artwork = artForIsland(isl), unlocked = islandRewardOpen(store, isl);
+  const qualified = isl.levels.filter(level => store.stars(level.id) >= 2).length;
+  const stored = islandAssembly(store, isl);
+  const draft = localIslandDraft(isl);
+  const label = unlocked ? (stored?.blocks === BLOCK_COUNT ? 'Посмотреть рисунок' : stored?.picture ? 'Продолжить сборку'
+    : draft ? 'Продолжить раскраску' : 'Выбрать раскраску и собрать рисунок') : 'По 2 или 3 звезды за каждый уровень';
+  const card = h('button', {
+    type: 'button', class: 'reward-sticker' + (compact ? ' compact' : ''),
+    disabled: !unlocked, onclick: async () => {
+      card.disabled = true;
+      sfx('tap');
+      try { await openIslandReward(isl, back); } finally { if (card.isConnected) card.disabled = !unlocked; }
+    },
+  }, h('img', { src: artwork.src, loading: 'lazy', alt: '' }), h('span', { class: 'reward-sticker-caption' },
+    h('strong', {}, 'Награда острова'), h('small', {}, unlocked ? label : `🔒 ${qualified} из ${isl.levels.length} на 2–3 ★`)));
+  if (compact) return card;
+  return h('section', { class: 'island-reward', 'aria-label': 'Награда острова' }, card, unlocked ? null : h('p', {}, label));
+}
+
 function island(isl) {
   const nodes = isl.levels.map((L, i) => {
     const open = store.isOpen(L), st = store.stars(L.id);
-    return h('button', { class: `node${open ? '' : ' locked'}${st ? ' done' : ''}${L.review ? ' review' : ''}`, 'aria-label': L.title,
+    return h('button', { class: `node${open ? '' : ' locked'}${st ? ' done' : ''}${L.review ? ' review' : ''}${st === 1 ? ' one-star' : ''}`,
+      'aria-label': st === 1 ? L.title + '. Одна звезда, можно улучшить' : L.title,
       onclick: () => { sfx('tap'); open ? playLevel(L) : say(P.levelLocked); } },
       h('b', {}, L.review ? (i === isl.levels.length - 1 ? '🎁' : '🔁') : i + 1), open ? stars3(st) : h('span', { class: 'lock' }, '🔒'));
   });
   screen('island-view', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }),
     ibtn('🔊', 'название острова', () => say(isl.title))),
-  h('div', { class: 'ihead', style: `--col:${LINE_COLOR[isl.line]}` }, h('span', { html: islandSVG(isl.line) }), h('span', { class: 'isticker big' + (store.islandDone(isl) ? '' : ' ghost'), html: animalSVG(isl.n) })),
+  h('div', { class: 'ihead', style: `--col:${LINE_COLOR[isl.line]}` }, h('span', { html: islandSVG(isl.line) })),
+  islandReward(isl, () => island(isl)),
   storyStrip(X, isl),
   h('div', { class: 'path' }, nodes),
   store.islandDone(isl) && !store.part('shown', {})[isl.id] ? ibtn('👨‍👩‍👦', 'покажи папе', () => showDad(X, isl, () => island(isl)), 'play') : null);
@@ -252,16 +329,17 @@ function playLevel(level) {
     const stars = misses <= 1 ? 3 : misses <= 4 ? 2 : 1;
     store.addTime((Date.now() - t0) / 1000);
     const first = !store.stars(level.id);
+    const wasReady = islandRewardOpen(store, isl);
     const res = store.finishLevel(level, stars);
-    reward(level, stars, res.sticker, first);
+    reward(level, stars, res.sticker, first, !wasReady && islandRewardOpen(store, isl));
   }
 }
 
 // ---------- награда ----------
-function reward(level, stars, sticker, first) {
+function reward(level, stars, sticker, first, artUnlocked = false) {
   const isl = ISLANDS[level.island];
   const words = stars === 3 ? P.stars3 : stars === 2 ? P.stars2 : P.stars1;
-  const story = first ? storyCard(X, level) : null, gift = sticker ? null : surprise(X);
+  const story = first ? storyCard(X, level) : null, gift = sticker || artUnlocked ? null : surprise(X);
   const justDone = store.dayDone() && store.todayIds().length === 3; // только что закончен «короткий день»
   const nxt = store.dayDone() ? store.nextLevel() : store.nextForToday();
   const onward = () => (justDone ? dayDone(X) : nxt ? playLevel(nxt) : map());
@@ -269,11 +347,11 @@ function reward(level, stars, sticker, first) {
   screen('reward', h('div', { class: 'confetti' }, Array.from({ length: 24 }, (_, i) => h('i', { style: `--x:${(i * 37) % 100}%;--c:${PALETTE[i % 9]};--t:${1.6 + (i % 5) * 0.3}s;--dl:${(i % 7) * 0.12}s` }))),
     h('div', { class: 'stars huge', html: [1, 2, 3].map(i => starSVG(i <= stars)).join('') }),
     hero('happy', 'big bounce'),
-    sticker ? h('div', { class: 'new-sticker' }, h('span', { html: animalSVG(isl.n) }), h('b', {}, isl.sticker)) : null,
+    sticker || artUnlocked ? islandReward(isl, () => island(isl)) : null,
     story, gift?.el,
     h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map), ibtn('▶', 'дальше', go, 'play')));
-  sfx(sticker ? 'island' : 'star');
-  say(words + (sticker ? ' ' + P.sticker(isl.sticker) : '') + (story ? ' ' + STORY_LINE(level) : '') + (gift ? ' ' + gift.text : ''));
+  sfx(sticker || artUnlocked ? 'island' : 'star');
+  say(words + (story ? ' ' + STORY_LINE(level) : '') + (gift ? ' ' + gift.text : ''));
 }
 
 // Реплика истории, которая открылась после уровня.
@@ -289,12 +367,9 @@ function rest(kind, nxt) {
 
 // ---------- коллекция наклеек и рисунков ----------
 function collection() {
-  const got = ISLANDS.filter(i => store.islandDone(i)).length;
+  const got = ISLANDS.filter(i => islandRewardOpen(store, i)).length;
   screen('collection', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }), h('span', { class: 'score' }, `${got} / ${ISLANDS.length}`)),
-    h('div', { class: 'stickers' }, ISLANDS.map(isl => {
-      const has = store.islandDone(isl);
-      return h('button', { class: 'sticker' + (has ? '' : ' ghost'), 'aria-label': isl.sticker, onclick: () => say(has ? isl.sticker : P.stickerWait(isl.n + 1)) }, h('span', { html: animalSVG(isl.n) }));
-    })),
+    h('div', { class: 'reward-collection' }, ISLANDS.map(isl => islandReward(isl, collection, true))),
     h('div', { class: 'badges' }, store.part('gifts', { colors: [], badges: [], last: 0 }).badges.map(b => h('span', {}, b))),
     store.profile.gallery.length ? h('div', { class: 'gallery' }, store.profile.gallery.map(u => h('img', { src: u, alt: 'мой рисунок' }))) : null);
   say(got ? P.stickersHave(got) : P.stickersNone);
@@ -359,8 +434,37 @@ setInterval(() => {
   else if (app.classList.contains('map') || app.classList.contains('welcome')) { const b = h('button', { class: 'toast', onclick: () => b.remove() }, '⏰ ' + text); document.body.append(b); setTimeout(() => b.remove(), 15000); }
 }, 60000);
 const params = new URLSearchParams(location.search);
+function openProfile(link = null) {
+  if (link) {
+    const target = store.profileForLink(link);
+    if (target) { store.switchProfile(target); setVoiceConfig(store.settings); }
+    history.replaceState(null, '', transferLink(location.href, link));
+  } else if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  welcome();
+}
+
+function entry() {
+  try {
+    const ticket = readInvitation(location.hash);
+    if (ticket) { showTransferReceiver(X, ticket, openProfile); return; }
+    const link = readProfileLink(location.hash);
+    if (link && !store.profileForLink(link)) {
+      screen('transfer-screen', h('section', { class: 'pbox transfer-box' }, h('h1', {}, 'Профиль ещё не перенесён'),
+        h('p', {}, 'На старом устройстве откройте «Для родителей → Ребёнок → Перенести на другое устройство» и создайте временную ссылку.'),
+        h('button', { type: 'button', class: 'pbtn', onclick: () => openProfile() }, 'К школе')));
+      return;
+    }
+    openProfile(link);
+  } catch (error) {
+    screen('transfer-screen', h('section', { class: 'pbox transfer-box' }, h('h1', {}, 'Перенос профиля'),
+      h('p', { role: 'status' }, error.message), h('button', { type: 'button', class: 'pbtn', onclick: () => openProfile() }, 'К школе')));
+  }
+}
 if (params.has('selftest')) selftest();
 else if (params.has('glyphs')) { // для отладки: все образцы письменных букв на одном листе
   app.className = 'screen';
   app.replaceChildren(h('div', { class: 'pen-grid' }, PEN_TASKS.map(t => h('div', { class: 'pen-card', html: sampleSVG(t) + `<small>${t.title}</small>` }))));
-} else welcome();
+} else {
+  window.addEventListener('hashchange', entry);
+  entry();
+}

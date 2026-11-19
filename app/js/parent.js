@@ -10,6 +10,7 @@ import { voiceStudio, clipCell } from './voice.js';
 import { albumCard } from './album.js';
 import { tokName } from './phrases.js';
 import { parentExtras } from './parent2.js';
+import { profileTransferControls } from './transfer-screen.js';
 
 const btn = (text, fn, cls = '') => h('button', { class: 'pbtn ' + cls, onclick: fn }, text);
 const card = (title, ...kids) => h('section', { class: 'pbox' }, h('h2', {}, title), ...kids);
@@ -45,7 +46,7 @@ function parentScreen(ctx) {
       Object.keys(st.profiles).length > 1 ? btn('Удалить этот профиль', () => { if (confirm(`Удалить профиль «${p.name}» со всем прогрессом?`)) { store.removeProfile(st.current); again(); } }, 'warn') : null),
     voicedNames().includes(p.name) || p.name === 'Ребёнок' ? null : h('div', { class: 'fam-row' }, clipCell('и:' + p.name.toLowerCase(), `🎙 Записать имя «${p.name}»`)),
     voicedNames().includes(p.name) || p.name === 'Ребёнок' ? null : h('p', { class: 'hint' }, 'Помощник зовёт ребёнка по имени. Для этого имени готовой записи нет, поэтому его произносит встроенный голос устройства — он отличается от голоса помощника. Чтобы звучало лучше, запишите имя своим голосом: нажмите на кнопку, скажите имя и нажмите ещё раз.'),
-    h('p', { class: 'hint' }, 'У каждого ребёнка свой прогресс, свой помощник и свои рисунки.'));
+    h('p', { class: 'hint' }, 'У каждого ребёнка свой прогресс, свой помощник и свои рисунки.'), profileTransferControls(store));
 
   // --- прогресс простыми словами ---
   const progress = card('Что уже умеет — по предметам', Object.entries(LINES).map(([k, name]) => {

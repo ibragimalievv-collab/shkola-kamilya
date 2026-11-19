@@ -522,6 +522,72 @@ svg { display: block; width: 100%; height: 100%; }
 .more-row { background: #fff8; border-radius: 3vmin; padding: 1vmin; } .tool-btn.more-btn { background: #e7f5ff; }
 .ready-pic.pic { box-shadow: 0 .6vmin 0 #74c0fc; }
 
+/* Иллюстрации и наклейки-пазлы */
+.artwork-title { margin: .6rem 0 .25rem; }
+.artwork-shelf, .reward-collection {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: .8rem;
+  width: min(100%, 880px); margin-inline: auto;
+}
+.artwork-card, .reward-sticker {
+  display: flex; flex-direction: column; align-items: stretch; gap: .35rem;
+  padding: .4rem; border: 2px solid #fff; border-radius: 1.05rem; background: #fff; color: #23364b;
+  box-shadow: 0 .24rem 0 #b6d1e5; font-weight: 800; text-align: left;
+}
+.artwork-card img, .reward-sticker img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: .72rem; }
+.artwork-card > span, .reward-sticker-caption { padding: .18rem .35rem; }
+.reward-sticker-caption { display: grid; gap: .15rem; }
+.reward-sticker-caption small { color: #36566d; font-weight: 650; }
+.reward-sticker:disabled { cursor: default; }
+.reward-sticker:disabled img { filter: saturate(.46); }
+.reward-sticker.compact { width: 100%; }
+.island-reward { display: grid; gap: .5rem; width: min(100%, 340px); margin-inline: auto; }
+.island-reward p { margin: 0; text-align: center; font-weight: 700; }
+.reward-thumb { object-fit: cover; border: 2px solid #fff; border-radius: .6rem; }
+.path .node.one-star { box-shadow: 0 0 0 2px #f09c4f; }
+
+/* Справка по краскам и цветной рисунок в отдельном окне */
+.paint-feedback { margin: 0; text-align: center; font-weight: 750; color: #26384f; }
+.paint-sample { width: min(90vw, 740px); max-height: 90dvh; padding: 1rem; border: 0; border-radius: 1rem; text-align: center; }
+.paint-sample::backdrop { background: #192e4aaa; }
+.paint-sample img { display: block; width: 100%; max-height: 70dvh; object-fit: contain; margin-bottom: .6rem; }
+.reward-action { min-height: 44px; padding: .45rem .85rem; background: #fff; color: #28445f; border-radius: .7rem; box-shadow: 0 .16rem 0 #bdd0e5; font-weight: 750; }
+.reward-action[aria-pressed="true"] { color: #164b35; background: #baf0d3; }
+
+/* Объёмная сборка из кубиков */
+.build-screen h1, .build-question, .build-notice { margin: 0; text-align: center; }
+.build-screen canvas {
+  display: block; width: min(100%, calc(52dvh * 1.64), 740px); height: auto; flex: none;
+  border-radius: 1.1rem; background: #eef9f3; border: 2px solid #c5e0d5; touch-action: none;
+}
+.build-controls, .build-choices { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .6rem; }
+.build-question { font-size: clamp(18px, 4vmin, 27px); font-weight: 800; }
+.build-part {
+  width: clamp(54px, 12vmin, 82px); height: clamp(50px, 11vmin, 74px);
+  display: grid; place-items: center; border-radius: 1.45rem; border: 2px solid #304d61;
+  box-shadow: 0 .24rem 0 #52798e, inset 0 .2rem #fffa; background: #d9efed;
+  color: #1c3447; font-size: clamp(23px, 5vmin, 36px); font-weight: 850; text-shadow: 0 1px #fffb;
+}
+.build-notice { min-height: 1.4em; font-weight: 700; }
+.build-screen [hidden], .board [hidden] { display: none; }
+
+.transfer-actions { display: grid; gap: .65rem; margin-block: .75rem; }
+.transfer-actions[hidden], .transfer-screen [hidden] { display: none; }
+.transfer-actions textarea {
+  box-sizing: border-box; width: 100%; min-width: 0; padding: .55rem .65rem;
+  border: 1px solid #8fa9bb; border-radius: .65rem; resize: vertical;
+  color: #19344b; background: #fff; font: 1rem/1.35 system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+.transfer-dialog {
+  width: min(34rem, calc(100vw - 2rem)); max-height: 88dvh; overflow-y: auto;
+  padding: clamp(1rem, 3vw, 1.65rem); border: 1px solid #c8dbed; border-radius: 1rem;
+  background: #f4fbff; color: #183347;
+}
+.transfer-dialog::backdrop { background: #16324c88; }
+.transfer-dialog > .pbtn { margin: .3rem .5rem .15rem 0; }
+.transfer-box { width: min(100%, 34rem); }
+
+
 .album-month figure { cursor: pointer; }
 .album-view { position: fixed; inset: 0; background: #000c; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; font: 16px system-ui, sans-serif; }
 .album-view img { max-width: 100%; max-height: 80dvh; border-radius: 12px; background: #fff; }

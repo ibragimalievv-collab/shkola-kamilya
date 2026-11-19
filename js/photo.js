@@ -16,6 +16,8 @@ import { HERO_DEFAULT } from './store.js';
 import { keepArt } from './album.js';
 import { CRAFTS, craftSVG, craftScreen } from './crafts.js';
 import { PICTURES, pictureSVG } from './pictures.js';
+import { ARTWORK } from './artwork.js';
+import { groupPaints, targetPaint } from './paint-game.js';
 
 const KEEP = 12;   // сколько раскрасок храним
 const SIDE = 720;  // длинная сторона листа в точках
@@ -356,37 +358,102 @@ const toBlob = (c, type = 'image/png', q) => new Promise(ok => c.toBlob(ok, type
 async function bitmap(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return createImageBitmap(file); }
 }
+const rewardDraft = item => item.islandDraft || item.art?.startsWith('island-');
+function trimColorings(list) {
+  const ordinary = list.filter(item => !rewardDraft(item));
+  for (const item of ordinary.slice(KEEP)) {
+    list.splice(list.indexOf(item), 1);
+    dropPage(item.id);
+  }
+}
 // Сделать раскраску из файла и запомнить её. Возвращает её номер.
-export async function addPage(store, file) {
+export async function addPage(store, file, islandDraft) {
   const bmp = await bitmap(file), k = Math.min(1, SIDE / Math.max(bmp.width, bmp.height));
   const c = canvasOf(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k))), g = c.getContext('2d');
   g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   g.drawImage(bmp, 0, 0, c.width, c.height);
   const id = 'cl-' + Date.now(), list = store.part('colorings', []);
   await idb.put('photos', id, await toBlob(c, 'image/jpeg', 0.85));
-  list.unshift({ id, d: today(), v: 2, lv: 1, style: 'ink', rec: 1 });
-  while (list.length > KEEP) dropPage(list.pop().id);
+  list.unshift({ id, d: today(), v: 2, lv: 1, style: 'ink', rec: 1, ...(islandDraft ? { islandDraft } : {}) });
+  trimColorings(list);
   store.save();
   return id;
 }
 // Готовая картинка (зверёк-наклейка или помощник) как раскраска. key — её имя, чтобы не заводить вторую такую же.
-export async function addArtPage(store, key, svg) {
+export async function addArtPage(store, key, source, lineArt = false) {
   const list = store.part('colorings', []), old = list.find(it => it.art === key);
   if (old) return old.id;
-  const text = svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" ');
-  const img = new Image();
-  await new Promise((ok, fail) => { img.onload = ok; img.onerror = fail; img.src = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' })); });
-  const c = canvasOf(SIDE, SIDE), g = c.getContext('2d');
-  g.fillStyle = '#fff'; g.fillRect(0, 0, SIDE, SIDE);
-  g.drawImage(img, 40, 40, SIDE - 80, SIDE - 80);
-  const id = 'cl-' + Date.now();
+  const raster = source instanceof Blob;
+  let img;
+  if (raster) img = await bitmap(source);
+  else {
+    const text = source.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" ');
+    const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+    img = new Image();
+    try { await new Promise((ok, fail) => { img.onload = ok; img.onerror = fail; img.src = url; }); }
+    finally { URL.revokeObjectURL(url); }
+  }
+  const pad = raster ? 10 : 40, k = (SIDE - 2 * pad) / Math.max(img.width, img.height);
+  const w = Math.round(img.width * k), hh = Math.round(img.height * k);
+  const c = canvasOf(w + 2 * pad, hh + 2 * pad), g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(img, pad, pad, w, hh);
+  img.close?.();
+  const id = 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   await idb.put('photos', id, await toBlob(c));
-  list.unshift({ id, d: today(), v: 2, art: key, rec: 1 });
-  while (list.length > KEEP) dropPage(list.pop().id);
+  list.unshift({ id, d: today(), v: 2, art: key, rec: 1, ...(lineArt ? { lineArt: true, game: 'abc' } : {}) });
+  trimColorings(list);
   store.save();
   return id;
 }
 const dropPage = id => { for (const k of [id, id + '-p', id + '-t', id + '-o']) idb.del('photos', k).catch(() => {}); };
+
+export async function openArtwork(x, art, back, options = {}) {
+  try {
+    const key = options.island ? 'island-' + options.island.id + '-' + art.id : art.id;
+    let page = x.store.part('colorings', []).find(it => it.art === key)?.id;
+    if (!page) {
+      const response = await fetch(art.src);
+      if (!response.ok) throw new Error(P.photoFail);
+      page = await addArtPage(x.store, key, await response.blob());
+    }
+    options.onDraft?.(page);
+    await openPage(x, page, back, options);
+  } catch { x.say(P.photoFail); }
+}
+
+export const LINE_ART_TYPES = 'image/png,image/jpeg,image/webp';
+export async function openLocalArtwork(x, file, back, options = {}) {
+  if (!LINE_ART_TYPES.split(',').includes(file.type)) return x.say(P.photoFail);
+  try {
+    const uid = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    const key = (options.island ? 'island-' + options.island.id + '-' : '') + 'local-' + uid;
+    const lineArt = !options.island || await looksLikeLineArt(file);
+    const page = lineArt ? await addArtPage(x.store, key, file, true) : await addPage(x.store, file, options.island.id);
+    options.onDraft?.(page);
+    await openPage(x, page, back, options);
+  } catch { x.say(P.photoFail); }
+}
+
+export async function resumeArtwork(x, page, back, options) {
+  try { await openPage(x, page, back, options); } catch { x.say(P.photoFail); }
+}
+
+async function looksLikeLineArt(file) {
+  const drawing = await bitmap(file);
+  const c = canvasOf(72, 72), g = c.getContext('2d', { willReadFrequently: true });
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 72, 72);
+  g.drawImage(drawing, 0, 0, 72, 72); drawing.close?.();
+  const px = g.getImageData(0, 0, 72, 72).data;
+  let white = 0, colored = 0, dark = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    const lo = Math.min(px[i], px[i + 1], px[i + 2]), hi = Math.max(px[i], px[i + 1], px[i + 2]);
+    if (lo > 239) white++;
+    else if (hi < 180) dark++;
+    if (hi - lo > 24) colored++;
+  }
+  return white > 72 * 72 * .52 && colored < 72 * 72 * .035 && dark > 72 * 72 * .013;
+}
 
 // ================= ЭКРАН: МОИ РАСКРАСКИ =================
 export function photoScreen(x, back, note) {
@@ -399,10 +466,15 @@ export function photoScreen(x, back, note) {
   };
   const cam = h('input', { type: 'file', accept: 'image/*', capture: 'user', hidden: true, onchange: take });
   const pick = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: take });
+  const lineArt = h('input', { type: 'file', accept: LINE_ART_TYPES, hidden: true, onchange: e => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (file) void openLocalArtwork(x, file, again);
+  } });
   const shelf = h('div', { class: 'shelf' });
   screen('library', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.photoHello), 'speak')),
-    h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => { say(P.photoTip); cam.click(); }, 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => pick.click(), 'play')), cam, pick, shelf);
-  list.forEach(async it => {
+    h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => { say(P.photoTip); cam.click(); }, 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => pick.click(), 'play'),
+      h('button', { type: 'button', class: 'reward-action', onclick: () => lineArt.click() }, 'Загрузить раскраску')), cam, pick, lineArt, shelf);
+  list.filter(it => !rewardDraft(it)).forEach(async it => {
     const btn = h('button', { class: 'book page-thumb', 'aria-label': 'раскраска', onclick: () => { sfx('tap'); openPage(x, it.id, again); } });
     shelf.append(btn);
     try { const b = (await idb.get('photos', it.id + '-t')) || (it.v ? null : await idb.get('photos', it.id)); if (b) btn.append(h('img', { src: URL.createObjectURL(b), alt: '' })); else btn.append(h('span', { class: 'cover' }, '🎨')); } catch { /* картинка не открылась — кнопка останется пустой */ }
@@ -418,7 +490,10 @@ export function photoScreen(x, back, note) {
   // Картинки, нарисованные для раскраски по буквам и примерам (много участков и цветов).
   const pics = h('div', { class: 'ready-row' }, PICTURES.map(([key]) => h('button', { class: 'ready-pic pic', 'aria-label': 'картинка для раскраски по буквам и примерам', html: pictureSVG(key),
     onclick: async () => { sfx('tap'); try { openPage(x, await addArtPage(store, 'pic-' + key, pictureSVG(key)), again); } catch { say(P.photoFail); } } })));
-  shelf.after(pics, row, crafts);
+  const original = h('div', { class: 'artwork-shelf' }, ARTWORK.map(art => h('button', {
+    type: 'button', class: 'artwork-card', onclick: () => { sfx('tap'); void openArtwork(x, art, again); },
+  }, h('img', { src: art.src, loading: 'lazy', alt: '' }), h('span', {}, art.title))));
+  shelf.after(h('h2', { class: 'artwork-title' }, 'Раскраски Камиля'), original, pics, row, crafts);
   say(note || P.photoHello);
 }
 
@@ -440,7 +515,7 @@ const rgbOf = s => [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16));
 const far = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
 const sleep = ms => new Promise(f => setTimeout(f, ms));
 
-async function openPage(x, id, back) {
+async function openPage(x, id, back, options = {}) {
   const { store, screen, ibtn, say } = x;
   const item = store.part('colorings', []).find(it => it.id === id);
   let src = null, saved = null, oldOps = null;
@@ -468,6 +543,10 @@ async function openPage(x, id, back) {
   let mask = null;
   const setAreas = () => {
     if (!item.v) { mask = new Uint8Array(W * H); for (let i = 0; i < mask.length; i++) mask[i] = fpx[i * 4 + 3] > 110 ? 1 : 0; return; }
+    if (item.lineArt) {
+      mask = Uint8Array.from(gray, value => value < 178 ? 1 : 0);
+      return;
+    }
     if (item.art) { // рисованная картинка: линии ровно по её цветам
       const ch = [0, 1, 2].map(c => { const a = new Uint8Array(W * H); for (let i = 0; i < a.length; i++) a[i] = fpx[i * 4 + c]; return a; });
       mask = artMask(ch, W, H);
@@ -507,10 +586,12 @@ async function openPage(x, id, back) {
     return a;
   };
   function doFill(g, op) {
-    const area = floodFill(mask, W, H, op.x, op.y, op.exact ? 0 : absorb) || dot(op);
+    const area = op.regions ? null : floodFill(mask, W, H, op.x, op.y, op.exact ? 0 : absorb) || dot(op);
+    const ids = op.regions ? spots(mask, W, H).id : null;
+    const selectedRegions = op.regions ? new Set(op.regions) : null;
     const img = g.getImageData(0, 0, W, H), d = img.data;
     let [r, gr, b] = op.c === 'rainbow' || op.magic ? [0, 0, 0] : rgbOf(op.c);
-    for (let i = 0; i < area.length; i++) if (area[i]) {
+    for (let i = 0; i < W * H; i++) if (area ? area[i] : selectedRegions.has(ids[i])) {
       if (op.magic) { r = soft[0][i]; gr = soft[1][i]; b = soft[2][i]; }               // волшебная палочка: настоящие цвета картинки
       else if (op.c === 'rainbow') [r, gr, b] = rainbow(Math.floor(i / W) / H + (i % W) / W / 3);
       d[i * 4] = r; d[i * 4 + 1] = gr; d[i * 4 + 2] = b; d[i * 4 + 3] = 255;
@@ -540,37 +621,44 @@ async function openPage(x, id, back) {
   function doStamp(g, op) { g.font = `${op.size * 3}px serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(op.e, op.x, op.y); }
 
   // --- инструменты ---
-  let color = COLORS[0], tool = 'fill', size = 26, cur = null, curClip = null, dirty = false, hue = 0, stamp = STAMPS[0], game = null, busy = false;
+  let color = COLORS[0], tool = 'fill', size = 26, cur = null, curClip = null, pointer = null, dirty = false, hue = 0, stamp = STAMPS[0], game = null, busy = false;
   const undo = [];
   const remember = () => { undo.push(pg.getImageData(0, 0, W, H)); if (undo.length > 12) undo.shift(); redoOps.length = 0; dirty = true; };
-  const pos = e => { const r = paint.getBoundingClientRect(); return [Math.round(((e.clientX - r.left) / r.width) * W), Math.round(((e.clientY - r.top) / r.height) * H)]; };
-  const log = op => { if (ops.length < 4000) ops.push(op); };
+  const pos = e => {
+    const r = paint.getBoundingClientRect();
+    return [Math.max(0, Math.min(W - 1, Math.floor((e.clientX - r.left) / r.width * W))), Math.max(0, Math.min(H - 1, Math.floor((e.clientY - r.top) / r.height * H)))];
+  };
+  const log = op => { if (ops.length < 4000) ops.push(op); queueSave(); };
   paint.addEventListener('pointerdown', e => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || pointer != null || e.isPrimary === false || e.button !== 0) return;
     const [px, py] = pos(e);
     if (game) return gameTap(px, py);
     remember();
     if (tool === 'fill' || tool === 'magic') { const op = { t: 'fill', x: px, y: py, c: color, magic: tool === 'magic' ? 1 : 0 }; doFill(pg, op); log(op); return sfx('pop'); }
     if (tool === 'stamp') { const op = { t: 'stamp', x: px, y: py, e: stamp, size }; doStamp(pg, op); log(op); return sfx('pop'); }
     try { paint.setPointerCapture(e.pointerId); } catch { /* не страшно */ }
+    pointer = e.pointerId;
     // На картинках с контурами кисть не выходит за участок; на фотографии границ не видно, поэтому там кисть свободная.
     cur = { t: 'stroke', c: color, size, erase: tool === 'erase' ? 1 : 0, h0: hue, clip: !photo && tool === 'brush' ? [px, py] : null, pts: [[px, py]] };
     curClip = clipOf(cur);
     doSeg(pg, cur, 0, curClip);
   });
   paint.addEventListener('pointermove', e => {
-    if (!cur) return;
+    if (!cur || e.pointerId !== pointer) return;
     e.preventDefault();
     const p = pos(e), last = cur.pts[cur.pts.length - 1];
     if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 3) return;
     cur.pts.push(p);
     doSeg(pg, cur, cur.pts.length - 1, curClip);
   });
-  const up = () => { if (!cur) return; hue = (hue + cur.pts.length * 0.012) % 1; log(cur); cur = curClip = null; };
-  paint.addEventListener('pointerup', up); paint.addEventListener('pointercancel', up);
-  const stepBack = () => { const last = undo.pop(); if (!last) return; pg.putImageData(last, 0, 0); const op = ops.pop(); if (op) redoOps.push(op); sfx('tap'); if (game) gameSync(); };
-  const stepForward = () => { const op = redoOps.pop(); if (!op) return; undo.push(pg.getImageData(0, 0, W, H)); applyOp(pg, op); ops.push(op); sfx('tap'); if (game) gameSync(); };
+  const up = e => {
+    if (!cur || e.pointerId !== pointer) return;
+    hue = (hue + cur.pts.length * 0.012) % 1; log(cur); cur = curClip = pointer = null;
+  };
+  paint.addEventListener('pointerup', up); paint.addEventListener('pointercancel', up); paint.addEventListener('lostpointercapture', up);
+  const stepBack = () => { const last = undo.pop(); if (!last) return; pg.putImageData(last, 0, 0); const op = ops.pop(); if (op) redoOps.push(op); sfx('tap'); if (game) gameSync(); queueSave(); };
+  const stepForward = () => { const op = redoOps.pop(); if (!op) return; undo.push(pg.getImageData(0, 0, W, H)); applyOp(pg, op); ops.push(op); sfx('tap'); if (game) gameSync(); queueSave(); };
   function applyOp(g, op) {
     if (op.t === 'fill') doFill(g, op);
     else if (op.t === 'stamp') doStamp(g, op);
@@ -578,7 +666,7 @@ async function openPage(x, id, back) {
   }
 
   // --- участки картинки (для раскраски по буквам и примерам и для лампочки) ---
-  let regions = null, palette = null;
+  let regions = null, palette = null, originalRegions = null, originalPalette = null;
   function findRegions() {
     if (regions) return;
     const { id, size: sz } = spots(mask, W, H), n = sz.length, INF = 9999;
@@ -589,42 +677,63 @@ async function openPage(x, id, back) {
     const best = new Int32Array(n).fill(-1), sum = Array.from({ length: n }, () => [0, 0, 0]);
     for (let i = 0; i < W * H; i++) { const k = id[i]; if (k < 0) continue; if (best[k] < 0 || dist[i] > dist[best[k]]) best[k] = i; const s = sum[k]; s[0] += soft[0][i]; s[1] += soft[1][i]; s[2] += soft[2][i]; }
     const bg = id[W + 1];
-    palette = []; regions = [];
+    palette = item.lineArt ? ['#8ecae6', '#ffca3a', '#ff595e', '#8ac926', '#a78bda', '#ff924c'].map(rgbOf) : [];
+    regions = [];
     for (let k = 0; k < n; k++) {
       if (k === bg || sz[k] < 260) continue;
       const c = sum[k].map(v => v / sz[k]);
-      if (Math.min(...c) > 232) continue;                               // белые места остаются белыми
-      let pi = palette.findIndex(q => far(q, c) < 50);
+      if (!item.lineArt && Math.min(...c) > 232) continue;                // белые места цветного исходника остаются белыми
+      let pi = item.lineArt ? regions.length % palette.length : palette.findIndex(q => far(q, c) < 50);
       if (pi < 0) { palette.push(c); pi = palette.length - 1; }
       regions.push({ k, pi, x: best[k] % W, y: Math.floor(best[k] / W), room: dist[best[k]], size: sz[k], done: false, text: '' });
     }
+    if (item.lineArt) palette = palette.slice(0, regions.length);
     regions.id = id;
+    originalRegions = regions; originalPalette = palette;
   }
   // --- раскраска по буквам ('abc') и по примерам ('num'): верный ответ даёт цвет ---
   let chosen = -1, keys = [];
+  const gameNote = h('p', { class: 'paint-feedback', role: 'status', hidden: true });
+  function usePalette(limit) {
+    const grouped = groupPaints(originalPalette, originalRegions, limit);
+    palette = grouped.palette;
+    regions = grouped.regions;
+    regions.id = originalRegions.id;
+  }
   function gameStart(mode) {
     findRegions();
     if (!palette.length) return;
     game = mode; item.game = mode; store.save();
-    const r = makeRng(+id.replace(/\D/g, '').slice(-8) + (mode === 'abc' ? 1 : 2));
+    const r = makeRng((item.paintSeed ?? Number(id.replace(/\D/g, '').slice(-8))) + (mode === 'abc' ? 1 : 2));
     if (mode === 'abc') { // буквы — только те, что ребёнок уже прошёл (не меньше пяти первых)
-      const known = shuffle(r, ORDER.slice(0, Math.max(5, lettersKnown(store))).split(''));
-      keys = palette.map((_, i) => known[i % known.length]);
+      item.abcCount ??= Math.max(5, lettersKnown(store));
+      const known = shuffle(r, ORDER.slice(0, item.abcCount).split(''));
+      usePalette(known.length);
+      keys = known.slice(0, palette.length);
       for (const g of regions) g.text = keys[g.pi];
     } else {              // примеры — по тому, что пройдено в счёте: числа, сложение до 5, до 10, до 20
       const done = k => { const isl = ISLANDS.find(i => i.id === k); return !!isl && store.islandDone(isl); };
-      const kind = done('m5') ? 'am20n' : done('m3') ? 'am10' : done('m2') ? 'a5' : null;
+      if (!Object.hasOwn(item, 'numKind')) item.numKind = done('m5') ? 'am20n' : done('m3') ? 'am10' : done('m2') ? 'a5' : null;
+      const kind = item.numKind;
       const pool = kind ? examplePool(kind, r) : new Map(); // ответ → примеры с таким ответом
-      const answers = kind ? shuffle(r, [...pool.keys()]).slice(0, palette.length) : shuffle(r, [1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, palette.length);
-      keys = palette.map((_, i) => answers[i % answers.length]);
+      const answers = kind ? shuffle(r, [...pool.keys()]) : shuffle(r, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      if (!answers.length) { gameStop(); return; }
+      usePalette(answers.length);
+      keys = answers.slice(0, palette.length);
       const used = {};
       for (const g of regions) { const a = keys[g.pi], list = kind ? pool.get(a) : [String(a)]; used[a] = (used[a] || 0) + 1; g.text = list[(used[a] - 1) % list.length]; }
     }
+    // Каждая краска должна иметь хотя бы одну видимую подпись, даже если остались одни мелкие участки.
+    for (let i = 0; i < palette.length; i++) {
+      const group = regions.filter(g => g.pi === i);
+      if (group.length && group.every(tight)) group.reduce((a, b) => a.room >= b.room ? a : b).anchor = true;
+    }
     chosen = -1;
+    store.save();
     gameSync(); drawPalette(); setRows();
     say(mode === 'abc' ? P.gameAbc : P.gameNum);
   }
-  const tight = g => g.room < (g.text.length > 2 ? 19 : g.text.length > 1 ? 13 : 9);
+  const tight = g => !g.anchor && g.room < (g.text.length > 2 ? 19 : g.text.length > 1 ? 13 : 9);
   // Какие участки уже раскрашены верно — смотрим на сам лист (так «шаг назад» ничего не путает).
   function gameSync() {
     const d = pg.getImageData(0, 0, W, H).data;
@@ -640,22 +749,30 @@ async function openPage(x, id, back) {
       tg.beginPath(); tg.roundRect(g.x - w / 2, g.y - hh / 2, w, hh, hh / 2); tg.fill(); tg.stroke();
       tg.fillStyle = '#2b2d42'; tg.fillText(g.text, g.x, g.y + 1);
     }
+    const count = regions.filter(g => g.done).length;
+    gameNote.textContent = count === regions.length
+      ? options.onBuild ? 'Раскраска готова. Можно собирать объёмный рисунок!' : 'Раскраска готова!'
+      : count ? `Раскрашено ${count} из ${regions.length}` : game === 'abc' ? 'Выбери краску и найди на рисунке такую же букву.' : 'Реши пример и найди краску с ответом.';
   }
-  const gameFill = g => { const op = { t: 'fill', x: g.x, y: g.y, c: hex(palette[g.pi]), exact: 1 }; doFill(pg, op); log(op); };
   function gameTap(px, py) {
-    if (chosen < 0) { stage.classList.add('shake'); setTimeout(() => stage.classList.remove('shake'), 500); return say(game === 'abc' ? P.gameAbc : P.gameNum); }
-    let k = -1;
-    for (let r = 0; r <= 8 && k < 0; r++) for (let dy = -r; dy <= r && k < 0; dy++) for (let dx = -r; dx <= r; dx++) { const xx = px + dx, y = py + dy; if (xx >= 0 && y >= 0 && xx < W && y < H && regions.id[y * W + xx] >= 0) { k = regions.id[y * W + xx]; break; } }
-    const g = regions.find(q => q.k === k);
+    if (chosen < 0) { gameNote.textContent = 'Сначала выбери краску.'; return say(game === 'abc' ? P.gameAbc : P.gameNum); }
+    const rect = paint.getBoundingClientRect();
+    const labelRadius = Math.min(25, Math.round(12 * W / Math.max(1, rect.width)));
+    const g = targetPaint(regions, regions.id, W, H, px, py, labelRadius, 8);
     if (!g || g.done) return;
-    if (g.pi !== chosen) { sfx('miss'); stage.classList.add('shake'); setTimeout(() => stage.classList.remove('shake'), 500); return; } // не тот ответ — мягко покачали
+    if (g.pi !== chosen) {
+      gameNote.textContent = game === 'abc' ? 'Поищи краску с такой же буквой.' : 'Проверь ответ и попробуй ещё.';
+      sfx('miss'); stage.classList.add('shake'); setTimeout(() => stage.classList.remove('shake'), 500);
+      return;
+    }
     remember();
-    gameFill(g);
-    for (const q of regions) if (q.pi === chosen && tight(q) && !q.done) gameFill(q); // тесные участки этого цвета — заодно
+    const matches = regions.filter(q => q === g || (q.pi === chosen && tight(q) && !q.done));
+    const op = { t: 'fill', regions: matches.map(q => q.k), c: hex(palette[g.pi]) };
+    doFill(pg, op); log(op);
     sfx('ok'); gameSync();
     if (regions.every(q => q.done) && !item.won) { item.won = 1; store.save(); sfx('island'); say(P.gameDone); }
   }
-  const gameStop = () => { game = null; item.game = null; store.save(); tg.clearRect(0, 0, W, H); setRows(); };
+  const gameStop = () => { game = null; item.game = null; regions = originalRegions; palette = originalPalette; store.save(); tg.clearRect(0, 0, W, H); setRows(); };
 
   // --- лампочка: подсветить то, что ещё не закрашено ---
   function bulb() {
@@ -677,7 +794,20 @@ async function openPage(x, id, back) {
   const colors = h('div', { class: 'board-tools' }), gamePal = h('div', { class: 'board-tools' }), tools = h('div', { class: 'board-tools' });
   COLORS.forEach((c, i) => { const b = h('button', { class: 'color' + (i ? '' : ' sel') + (c === '#ffffff' ? ' white' : c === 'rainbow' ? ' rainbow' : ''), style: c === 'rainbow' ? '' : `background:${c}`, 'aria-label': 'цвет', onclick: () => { color = c; pickOne(colors, 'color', b); if (tool === 'erase' || tool === 'magic' || tool === 'stamp') setTool('fill'); } }); colors.append(b); });
   function drawPalette() { // цвета с подписями: буква или число
-    gamePal.replaceChildren(...palette.map((c, i) => { const b = h('button', { class: 'color keyed', style: `background:${hex(c)}`, 'aria-label': 'цвет с подписью', onclick: () => { chosen = i; pickOne(gamePal, 'keyed', b); sfx('tap'); say(game === 'abc' ? tokL(keys[i]) : String(keys[i])); } }, h('b', {}, String(keys[i]))); return b; }));
+    gamePal.replaceChildren(...palette.map((c, i) => {
+      const label = String(keys[i]);
+      const b = h('button', {
+        type: 'button', class: 'color keyed', style: `background:${hex(c)}`,
+        'aria-label': game === 'abc' ? `Буква ${label}` : `Ответ ${label}`, 'aria-pressed': 'false',
+        onclick: () => {
+          chosen = i;
+          pickOne(gamePal, 'keyed', b);
+          for (const button of gamePal.children) button.setAttribute('aria-pressed', String(button === b));
+          sfx('tap'); say(game === 'abc' ? tokL(keys[i]) : label);
+        },
+      }, h('b', {}, label));
+      return b;
+    }));
   }
   const toolBtns = {};
   const stamps = h('div', { class: 'board-tools hidden-row' });
@@ -692,7 +822,7 @@ async function openPage(x, id, back) {
   const moreBtn = h('button', { class: 'tool-btn more-btn', 'aria-label': 'ещё', onclick: () => { sfx('tap'); more.classList.toggle('hidden-row'); moreBtn.classList.toggle('sel', !more.classList.contains('hidden-row')); } }, '➕');
   more.append(tool3('magic', '🪄', 'волшебная палочка: цвет как на картинке'), tool3('stamp', '⭐', 'наклейки'), h('button', { class: 'tool-btn', 'aria-label': 'вернуть', onclick: stepForward }, '↪️'));
   const modeBtns = {};
-  if (item.art) for (const [m, label, aria] of [[null, '🎨', 'раскрашивать как хочу'], ['abc', 'АБВ', 'раскраска по буквам'], ['num', '1+2', 'раскраска по примерам']])
+  if (item.art && !options.onBuild) for (const [m, label, aria] of [[null, '🎨', 'раскрашивать как хочу'], ['abc', 'АБВ', 'раскраска по буквам'], ['num', '1+2', 'раскраска по примерам']])
     modes.append(modeBtns[m] = h('button', { class: 'tool-btn mode-btn', 'aria-label': aria, onclick: () => { sfx('tap'); m ? gameStart(m) : gameStop(); } }, label));
   if (photo) {
     const styleBtn = h('button', { class: 'tool-btn', 'aria-label': 'жирные контуры или карандаш', onclick: () => { item.style = (item.style || 'ink') === 'ink' ? 'pencil' : 'ink'; store.save(); setLines(); styleBtn.textContent = item.style === 'ink' ? '🖊️' : '✏️'; sfx('tap'); } }, (item.style || 'ink') === 'ink' ? '🖊️' : '✏️');
@@ -706,6 +836,7 @@ async function openPage(x, id, back) {
   (item.art ? modes : tools).append(moreBtn);
   function setRows() { // в игре вместо обычных красок — краски с подписями, а кисти спрятаны
     colors.classList.toggle('hidden-row', !!game); tools.classList.toggle('hidden-row', !!game); gamePal.classList.toggle('hidden-row', !game);
+    gameNote.hidden = !game;
     for (const t of ['magic', 'stamp']) toolBtns[t].classList.toggle('hidden-row', !!game); // в игре палочка и наклейки не нужны
     if (game) { stamps.classList.add('hidden-row'); if (tool === 'magic' || tool === 'stamp') setTool('fill'); }
     for (const [m, b] of Object.entries(modeBtns)) b.classList.toggle('sel', String(game) === m);
@@ -713,14 +844,23 @@ async function openPage(x, id, back) {
 
   // --- сохранение ---
   const compose = side => { const k = side / Math.max(W, H), c = canvasOf(Math.round(W * k), Math.round(H * k)), g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(paint, 0, 0, c.width, c.height); g.drawImage(lines, 0, 0, c.width, c.height); return c; };
-  const keep = async () => { // краска, действия и картинка для полки — чтобы продолжить в другой раз
-    try {
-      await idb.put('photos', id + '-p', await toBlob(paint));
-      await idb.put('photos', id + '-t', await toBlob(compose(300), 'image/jpeg', 0.8));
-      if (ops.length < 4000) { await idb.put('photos', id + '-o', new Blob([JSON.stringify(ops)])); if (!base) item.rec = 1; }
+  let saveTimer, writes = Promise.resolve();
+  const keep = () => {
+    clearTimeout(saveTimer);
+    const operations = ops.length < 4000 ? new Blob([JSON.stringify(ops)]) : null;
+    const frame = Promise.all([toBlob(paint), toBlob(compose(300), 'image/jpeg', 0.8)]);
+    // Пишем снимки последовательно: поздний ответ старой записи не перетрёт новую.
+    writes = writes.catch(() => {}).then(async () => {
+      const [ink, thumbnail] = await frame;
+      if (!ink || !thumbnail) throw new Error(P.photoFail);
+      await idb.put('photos', id + '-p', ink);
+      await idb.put('photos', id + '-t', thumbnail);
+      if (operations) { await idb.put('photos', id + '-o', operations); if (!base) item.rec = 1; }
       store.save();
-    } catch { /* мало места — раскраска останется как была */ }
+    });
+    return writes;
   };
+  const queueSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { void keep().catch(() => {}); }, 400); };
   // Раскрашенный помощник: его новые цвета переходят в уроки, на карту и в домик.
   function heroColors() {
     if (item.art !== 'hero') return false;
@@ -744,16 +884,44 @@ async function openPage(x, id, back) {
     if (changed) { store.profile.heroDone = true; store.save(); }
     return changed;
   }
-  const leave = async note => { if (busy) return; await keep(); back(note); };
+  const leave = async note => {
+    if (busy) return;
+    busy = true;
+    try { await keep(); back(note); } catch { say(P.photoFail); } finally { busy = false; }
+  };
   const finish = async () => {
     if (busy) return;
     if (!dirty && !saved) return say(P.needDraw2);
+    if (options.onBuild) {
+      if (!game || !regions.length || !regions.every(g => g.done)) {
+        gameNote.textContent = 'Сначала закончи раскраску.';
+        bulb();
+        return;
+      }
+      busy = true;
+      try {
+        const picture = await toBlob(compose(SIDE));
+        if (!picture) throw new Error(P.photoFail);
+        await keep();
+        await options.onBuild(picture);
+        void keepArt(store, compose(480).toDataURL('image/jpeg', 0.78));
+      } catch { say(P.photoFail); }
+      finally { busy = false; }
+      return;
+    }
     keepArt(store, compose(480).toDataURL('image/jpeg', 0.78));
     const fresh = heroColors();
     sfx('star');
     leave(fresh ? P.heroNew : P.photoSaved);
   };
-  const remove = () => { const list = store.part('colorings', []), i = list.indexOf(item); if (i >= 0) list.splice(i, 1); dropPage(id); store.save(); back(); };
+  const remove = async () => {
+    if (busy) return;
+    busy = true; clearTimeout(saveTimer);
+    await writes.catch(() => {});
+    const list = store.part('colorings', []), i = list.indexOf(item);
+    if (i >= 0) list.splice(i, 1);
+    dropPage(id); store.save(); back();
+  };
   const print = () => { // лист А4: раскраска как есть (нераскрашенную можно красить карандашами, поделку — вырезать)
     document.getElementById('print')?.remove();
     const page = h('div', { id: 'print', class: 'album' }, h('img', { src: compose(1400).toDataURL('image/png'), alt: '', style: 'width:100%' }));
@@ -818,14 +986,44 @@ async function openPage(x, id, back) {
   }
 
   // --- экран ---
-  // Образец — маленькая картинка в уголке; нажатие прячет её или показывает снова.
-  const sample = item.v ? h('button', { class: 'photo-sample' + (item.art ? ' hide' : ''), 'aria-label': 'образец', onclick: () => sample.classList.toggle('hide') }, h('img', { src: URL.createObjectURL(src), alt: '' })) : null;
-  const stage = h('div', { class: 'board-stage', style: `aspect-ratio:${W}/${H};--ar:${(W / H).toFixed(3)}` }, paint, lines, labels, hint, sample);
+  let sampleUrl;
+  function samplePicture() {
+    if (!game || !regions?.length) return Promise.resolve(src);
+    const c = canvasOf(W, H), ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    const pixels = ctx.getImageData(0, 0, W, H);
+    const byId = new Map(regions.map(region => [region.k, palette[region.pi]]));
+    for (let i = 0; i < W * H; i++) {
+      const rgb = byId.get(regions.id[i]);
+      if (rgb) { pixels.data[i * 4] = rgb[0]; pixels.data[i * 4 + 1] = rgb[1]; pixels.data[i * 4 + 2] = rgb[2]; }
+    }
+    ctx.putImageData(pixels, 0, 0); ctx.drawImage(lines, 0, 0);
+    return toBlob(c);
+  }
+  const sampleImage = h('img', { alt: 'Готовый цветной образец' });
+  const sample = h('dialog', { class: 'paint-sample', 'aria-label': 'Цветной пример' }, sampleImage,
+    h('button', { class: 'reward-action', type: 'button', onclick: () => sample.close() }, 'К раскраске'));
+  sample.addEventListener('close', () => { sampleImage.removeAttribute('src'); URL.revokeObjectURL(sampleUrl); });
+  const sampleButton = item.v && h('button', { class: 'reward-action', type: 'button', onclick: async () => {
+    if (sample.open || sampleButton.disabled) return;
+    sampleButton.disabled = true;
+    try {
+      const picture = await samplePicture();
+      if (!picture || !sample.isConnected) return;
+      sampleUrl = URL.createObjectURL(picture);
+      sampleImage.src = sampleUrl;
+      sample.showModal();
+    } finally { sampleButton.disabled = false; }
+  } }, 'Цветной пример');
+  const stage = h('div', { class: 'board-stage', style: `aspect-ratio:${W}/${H};--ar:${(W / H).toFixed(3)}` }, paint, lines, labels, hint);
   screen('level', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), h('span', { class: 'grow' }),
     ibtn('💡', 'подсказка: что ещё не закрашено', bulb), ibtn('↩️', 'шаг назад', stepBack, 'undo'),
-    h('button', { class: 'check', 'aria-label': 'готово', onclick: finish }, '✔'), ibtn('🔊', 'послушать', () => say(game === 'abc' ? P.gameAbc : game === 'num' ? P.gameNum : P.photoReady), 'speak')),
-  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, stamps, tools, modes, more)));
+    h('button', { class: 'check', 'aria-label': options.onBuild ? 'собрать объёмный рисунок' : 'готово', onclick: finish }, options.onBuild ? '🧱' : '✔'),
+    ibtn('🔊', 'послушать', () => say(game === 'abc' ? P.gameAbc : game === 'num' ? P.gameNum : P.photoReady), 'speak')),
+  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, gameNote, stamps, tools, modes, more,
+    h('div', { class: 'board-tools' }, sampleButton, options.onBuild && h('button', { type: 'button', class: 'reward-action', onclick: finish }, 'Собрать объёмный рисунок')))), sample);
   setRows();
-  if (!saved) keep();
-  if (item.art && item.game) gameStart(item.game); else say(P.photoReady);
+  if (options.onBuild) gameStart('abc');
+  else if (item.art && item.game) gameStart(item.game);
+  else say(P.photoReady);
 }

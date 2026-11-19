@@ -8,15 +8,15 @@ const MAX = 150; // сколько рисунков храним (самые с�
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 
 // Сохранить рисунок: в коллекцию ребёнка (последние 12) и в альбом по датам.
-export async function keepArt(store, dataUrl) {
+export async function keepArt(store, dataUrl, media = idb) {
   store.addArt(dataUrl);
   try {
     const [head, body] = dataUrl.split(','), bin = atob(body), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const id = 'al-' + Date.now(), list = store.part('album', []);
-    await idb.put('photos', id, new Blob([bytes], { type: /data:([^;]+)/.exec(head)?.[1] || 'image/jpeg' }));
+    await media.put('photos', id, new Blob([bytes], { type: /data:([^;]+)/.exec(head)?.[1] || 'image/jpeg' }));
     list.push({ id, d: today() });
-    while (list.length > MAX) idb.del('photos', list.shift().id).catch(() => {});
+    while (list.length > MAX) media.del('photos', list.shift().id).catch(() => {});
     store.save();
   } catch { /* мало места — рисунок останется только в коллекции */ }
 }

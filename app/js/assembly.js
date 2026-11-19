@@ -15,10 +15,10 @@ export async function loadAssemblyPicture(store, island) {
   try { return await idb.get('photos', assembly.picture); } catch { return null; }
 }
 
-export async function saveAssemblyPicture(store, island, picture) {
+export async function saveAssemblyPicture(store, island, picture, media = idb) {
   const assemblies = store.part('assemblies', {});
   const key = 'assembly:' + store.state.current + ':' + island.id;
-  await idb.put('photos', key, picture);
+  await media.put('photos', key, picture);
   assemblies[island.id] = { picture: key, blocks: 0, letters: Math.max(5, lettersKnown(store)) };
   store.save();
 }
@@ -38,7 +38,7 @@ export function assemblyQuestion(island, step, knownLetters) {
   return { prompt, target, options: shuffle(rng, [target, target + 1, target > 1 ? target - 1 : target + 2]) };
 }
 
-export async function assemblyScreen(x, island, drawing, back) {
+export async function assemblyScreen(x, island, drawing, back, backLabel = 'назад к острову') {
   const { store, screen, ibtn } = x;
   let image;
   try { image = await createImageBitmap(drawing); } catch { return back(); }
@@ -99,7 +99,7 @@ export async function assemblyScreen(x, island, drawing, back) {
   view.addEventListener('pointerup', () => { drag = null; });
   view.addEventListener('pointercancel', () => { drag = null; });
   const rotate = direction => { yaw = Math.max(-.66, Math.min(.66, yaw + direction * .18)); update(); };
-  screen('build-screen', h('div', { class: 'bar' }, ibtn('◀', 'назад к острову', () => { image.close?.(); back(); }),
+  screen('build-screen', h('div', { class: 'bar' }, ibtn('◀', backLabel, () => { image.close?.(); back(); }),
     h('span', { class: 'grow' }), tally), h('h1', {}, 'Собери объёмный рисунок'), view,
     h('div', { class: 'build-controls' }, ibtn('↶', 'повернуть влево', () => rotate(-1)), example, front,
       ibtn('↷', 'повернуть вправо', () => rotate(1))), label, choices, notice);

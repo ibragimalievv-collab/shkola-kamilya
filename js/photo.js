@@ -17,10 +17,11 @@ import { keepArt } from './album.js';
 import { CRAFTS, craftSVG, craftScreen } from './crafts.js';
 import { PICTURES, pictureSVG } from './pictures.js';
 import { ARTWORK } from './artwork.js';
-import { groupPaints, targetPaint } from './paint-game.js';
+import { groupPaints, guidePaint, targetPaint } from './paint-game.js';
 
 const KEEP = 12;   // сколько раскрасок храним
 const SIDE = 720;  // длинная сторона листа в точках
+const RASTER_PAD = 10;
 const COLORS = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#2a9d8f', '#1982c4', '#8ecae6', '#6a4c93', '#f15bb5', '#ffb3c6', '#f6c9a0', '#c68642', '#7b4a23', '#2b2d42', '#adb5bd', '#ffffff', 'rainbow'];
 const STAMPS = ['⭐', '❤️', '🌸', '🦋', '👑', '🎩', '🕶️', '🎀', '☀️', '⚽', '🐞', '🎈'];
 // Цвет радуги по числу от 0 до 1.
@@ -268,6 +269,29 @@ function grow(mask, w, h, r) {
   }
   return cur;
 }
+
+function closeLines(mask, w, h) {
+  const thick = grow(mask, w, h, 1), outside = grow(thick.map(v => 1 - v), w, h, 1);
+  return mask.map((v, i) => v || 1 - outside[i]);
+}
+
+// У иллюстраций с прорисованной обводкой оставляем её саму и границы резкой смены цвета.
+export function illustrationMask(rgb, w, h) {
+  const [r, g, b] = rgb.map(ch => blur(ch, w, h, 1));
+  const dark = Uint8Array.from(r, (v, i) => Math.max(v, g[i], b[i]) < 107 && .3 * v + .59 * g[i] + .11 * b[i] < 75 ? 1 : 0);
+  const nearDark = grow(dark, w, h, 3);
+  const light = dark.map(v => 1 - v);
+  const core = grow(light, w, h, 10).map(v => 1 - v);
+  const inner = grow(core, w, h, 8);
+  const mask = dark.map((v, i) => v && !inner[i] ? 1 : 0);
+  const distance = (a, c) => Math.abs(r[a] - r[c]) + Math.abs(g[a] - g[c]) + Math.abs(b[a] - b[c]);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    if (!nearDark[i] && (distance(i - 1, i + 1) > 119 || distance(i - w, i + w) > 119)) mask[i] = 1;
+  }
+  return closeLines(mask, w, h);
+}
+
 // Заливка: область без линий вокруг точки (x, y). Возвращает маску области (1 — залить) или null, если рядом нет чистого места.
 // Линии с фотографии редко смыкаются идеально, поэтому заливка «не пролезает» в щели уже 6 точек:
 // сначала область ищется по утолщённым линиям (щели в них закрыты), потом возвращается к настоящим линиям.
@@ -372,6 +396,7 @@ export async function addPage(store, file, islandDraft) {
   const c = canvasOf(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k))), g = c.getContext('2d');
   g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   g.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
   const id = 'cl-' + Date.now(), list = store.part('colorings', []);
   await idb.put('photos', id, await toBlob(c, 'image/jpeg', 0.85));
   list.unshift({ id, d: today(), v: 2, lv: 1, style: 'ink', rec: 1, ...(islandDraft ? { islandDraft } : {}) });
@@ -393,7 +418,7 @@ export async function addArtPage(store, key, source, lineArt = false) {
     try { await new Promise((ok, fail) => { img.onload = ok; img.onerror = fail; img.src = url; }); }
     finally { URL.revokeObjectURL(url); }
   }
-  const pad = raster ? 10 : 40, k = (SIDE - 2 * pad) / Math.max(img.width, img.height);
+  const pad = raster ? RASTER_PAD : 40, k = (SIDE - 2 * pad) / Math.max(img.width, img.height);
   const w = Math.round(img.width * k), hh = Math.round(img.height * k);
   const c = canvasOf(w + 2 * pad, hh + 2 * pad), g = c.getContext('2d');
   g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
@@ -417,22 +442,20 @@ export async function openArtwork(x, art, back, options = {}) {
       if (!response.ok) throw new Error(P.photoFail);
       page = await addArtPage(x.store, key, await response.blob());
     }
-    options.onDraft?.(page);
     await openPage(x, page, back, options);
-  } catch { x.say(P.photoFail); }
+  } catch { x.say(P.photoFail); if (options.onUnavailable) options.onUnavailable(null, 'Не удалось открыть эту картинку. Попробуй другую.'); else back(P.photoFail); }
 }
 
 export const LINE_ART_TYPES = 'image/png,image/jpeg,image/webp';
 export async function openLocalArtwork(x, file, back, options = {}) {
-  if (!LINE_ART_TYPES.split(',').includes(file.type)) return x.say(P.photoFail);
   try {
+    if (!LINE_ART_TYPES.split(',').includes(file.type) && (file.type || !/\.(png|jpe?g|webp)$/i.test(file.name))) throw new Error(P.photoFail);
     const uid = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     const key = (options.island ? 'island-' + options.island.id + '-' : '') + 'local-' + uid;
     const lineArt = !options.island || await looksLikeLineArt(file);
     const page = lineArt ? await addArtPage(x.store, key, file, true) : await addPage(x.store, file, options.island.id);
-    options.onDraft?.(page);
     await openPage(x, page, back, options);
-  } catch { x.say(P.photoFail); }
+  } catch { x.say(P.photoFail); if (options.onUnavailable) options.onUnavailable(null, 'Не удалось прочитать файл. Выбери картинку PNG, JPG или WebP.'); else back(P.photoFail); }
 }
 
 export async function resumeArtwork(x, page, back, options) {
@@ -452,7 +475,7 @@ async function looksLikeLineArt(file) {
     else if (hi < 180) dark++;
     if (hi - lo > 24) colored++;
   }
-  return white > 72 * 72 * .52 && colored < 72 * 72 * .035 && dark > 72 * 72 * .013;
+  return white > 72 * 72 * .52 && colored < 72 * 72 * .035 && dark > 72 * 72 * .004;
 }
 
 // ================= ЭКРАН: МОИ РАСКРАСКИ =================
@@ -462,7 +485,7 @@ export function photoScreen(x, back, note) {
   const take = async e => {
     const f = e.target.files[0];
     if (!f) return;
-    try { openPage(x, await addPage(store, f), again); } catch { say(P.photoFail); }
+    try { await openPage(x, await addPage(store, f), again); } catch { again(P.photoFail); }
   };
   const cam = h('input', { type: 'file', accept: 'image/*', capture: 'user', hidden: true, onchange: take });
   const pick = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: take });
@@ -473,9 +496,10 @@ export function photoScreen(x, back, note) {
   const shelf = h('div', { class: 'shelf' });
   screen('library', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.photoHello), 'speak')),
     h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => { say(P.photoTip); cam.click(); }, 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => pick.click(), 'play'),
-      h('button', { type: 'button', class: 'reward-action', onclick: () => lineArt.click() }, 'Загрузить раскраску')), cam, pick, lineArt, shelf);
+      h('button', { type: 'button', class: 'reward-action', onclick: () => lineArt.click() }, 'Загрузить раскраску')), cam, pick, lineArt,
+    note === P.photoFail && h('p', { class: 'paint-feedback', role: 'status' }, 'Не удалось открыть картинку. Попробуй другой файл.'), shelf);
   list.filter(it => !rewardDraft(it)).forEach(async it => {
-    const btn = h('button', { class: 'book page-thumb', 'aria-label': 'раскраска', onclick: () => { sfx('tap'); openPage(x, it.id, again); } });
+    const btn = h('button', { class: 'book page-thumb', 'aria-label': 'раскраска', onclick: () => { sfx('tap'); void resumeArtwork(x, it.id, again); } });
     shelf.append(btn);
     try { const b = (await idb.get('photos', it.id + '-t')) || (it.v ? null : await idb.get('photos', it.id)); if (b) btn.append(h('img', { src: URL.createObjectURL(b), alt: '' })); else btn.append(h('span', { class: 'cover' }, '🎨')); } catch { /* картинка не открылась — кнопка останется пустой */ }
   });
@@ -525,16 +549,23 @@ async function openPage(x, id, back, options = {}) {
   const layer = cls => { const c = canvasOf(W, H); c.className = 'layer ' + cls; return c; };
   const paint = layer('ink'), lines = layer('over'), labels = layer('over'), hint = layer('over hint');
   const pg = paint.getContext('2d', { willReadFrequently: true }), lg = lines.getContext('2d'), tg = labels.getContext('2d'), hg = hint.getContext('2d');
-  if (saved) { try { pg.drawImage(await createImageBitmap(saved), 0, 0, W, H); } catch { /* начнём с чистого листа */ } }
+  if (saved) {
+    try { const ink = await createImageBitmap(saved); pg.drawImage(ink, 0, 0, W, H); ink.close?.(); } catch { /* начнём с чистого листа */ }
+  }
   // Действия ребёнка по порядку — из них потом собирается ускоренное видео. Если запись началась не с чистого листа,
   // видео начнётся с того, что уже было нарисовано.
   const ops = item.rec && Array.isArray(oldOps) ? oldOps : [], redoOps = [];
   const base = item.rec && ops.length ? null : (saved ? pg.getImageData(0, 0, W, H) : null);
+  // На начатых листах номера участков и сохранённые мазки относятся к старым контурам.
+  item.paintVersion ??= ops.length || base?.data.some((v, i) => i % 4 === 3 && v > 0) ? 1 : 2;
+  const revised = item.paintVersion >= 2;
+  const illustration = revised && ARTWORK.some(art => item.art === art.id || item.art?.endsWith('-' + art.id));
 
   // --- картинка: цвета, яркость, линии, области ---
   const full = canvasOf(W, H), fg = full.getContext('2d', { willReadFrequently: true });
   fg.fillStyle = '#fff'; fg.fillRect(0, 0, W, H);
   fg.drawImage(bmp, 0, 0, W, H);
+  bmp.close?.();
   const fpx = fg.getImageData(0, 0, W, H).data, gray = new Float32Array(W * H);
   for (let i = 0; i < gray.length; i++) gray[i] = 0.3 * fpx[i * 4] + 0.59 * fpx[i * 4 + 1] + 0.11 * fpx[i * 4 + 2];
   const lit = photo ? levels(gray) : gray; // для линий снимок выравнивается по яркости
@@ -545,11 +576,21 @@ async function openPage(x, id, back, options = {}) {
     if (!item.v) { mask = new Uint8Array(W * H); for (let i = 0; i < mask.length; i++) mask[i] = fpx[i * 4 + 3] > 110 ? 1 : 0; return; }
     if (item.lineArt) {
       mask = Uint8Array.from(gray, value => value < 178 ? 1 : 0);
+      if (revised) mask = closeLines(mask, W, H);
       return;
     }
     if (item.art) { // рисованная картинка: линии ровно по её цветам
       const ch = [0, 1, 2].map(c => { const a = new Uint8Array(W * H); for (let i = 0; i < a.length; i++) a[i] = fpx[i * 4 + c]; return a; });
-      mask = artMask(ch, W, H);
+      mask = illustration ? illustrationMask(ch, W, H) : artMask(ch, W, H);
+      if (illustration) {
+        // Обводка держит заливку в сцене, даже если край иллюстрации светлый.
+        const left = RASTER_PAD - 1, right = W - RASTER_PAD, bottom = H - RASTER_PAD;
+        for (let y = left; y <= bottom; y++) {
+          mask[y * W + left] = mask[y * W + right] = 1;
+        }
+        mask.fill(1, left * W + left, left * W + right + 1);
+        mask.fill(1, bottom * W + left, bottom * W + right + 1);
+      }
       return;
     }
     // фотография: под рисунком, невидимо, лист поделён на крупные цветовые области — по ним работает заливка
@@ -570,8 +611,16 @@ async function openPage(x, id, back, options = {}) {
   const setLines = () => {
     const img = lg.createImageData(W, H), d = img.data;
     let a;
-    if (item.art || !item.v) a = mask.map(v => (v ? 255 : 0));                       // готовая картинка: её контуры
-    else if ((item.style || 'ink') === 'ink') a = ink(lit, W, H, item.lv ?? 1).map(v => (v ? 255 : 0)); // фото: жирные контуры без теней
+    if (item.art || !item.v || (revised && (options.onBuild || (item.style || 'ink') === 'ink'))) {
+      a = mask.map(v => (v ? 255 : 0));
+      if (illustration) {
+        const softEdge = grow(mask, W, H, 1);
+        for (let i = 0; i < a.length; i++) if (!a[i] && softEdge[i]) a[i] = 95;
+      } else if (photo) {
+        const detail = ink(lit, W, H, item.lv ?? 1);
+        for (let i = 0; i < a.length; i++) if (!a[i] && detail[i]) a[i] = 80;
+      }
+    } else if ((item.style || 'ink') === 'ink') a = ink(lit, W, H, item.lv ?? 1).map(v => (v ? 255 : 0)); // фото: жирные контуры без теней
     else a = sketch(lit, W, H, item.lv ?? 1);                                          // фото: карандашный рисунок
     for (let i = 0; i < W * H; i++) { d[i * 4] = 43; d[i * 4 + 1] = 45; d[i * 4 + 2] = 66; d[i * 4 + 3] = a[i]; }
     lg.putImageData(img, 0, 0);
@@ -580,6 +629,10 @@ async function openPage(x, id, back, options = {}) {
 
   // --- действия: заливка, мазок, наклейка. Одни и те же функции рисуют и на листе, и в видео ---
   const absorb = photo ? 700 : 0;
+  const regionAt = (x, y) => {
+    const pixel = nearest(mask, W, H, Math.floor(x), Math.floor(y), 5);
+    return pixel < 0 ? -1 : spots(mask, W, H).id[pixel];
+  };
   const dot = p => { // кружок вокруг касания — если заливать нечего
     const a = new Uint8Array(W * H), R = 14, cx = Math.round(p.x), cy = Math.round(p.y);
     for (let y = Math.max(0, cy - R); y <= Math.min(H - 1, cy + R); y++) for (let xx = Math.max(0, cx - R); xx <= Math.min(W - 1, cx + R); xx++) if ((xx - cx) ** 2 + (y - cy) ** 2 <= R * R) a[y * W + xx] = 1;
@@ -588,12 +641,15 @@ async function openPage(x, id, back, options = {}) {
   function doFill(g, op) {
     const area = op.regions ? null : floodFill(mask, W, H, op.x, op.y, op.exact ? 0 : absorb) || dot(op);
     const ids = op.regions ? spots(mask, W, H).id : null;
-    const selectedRegions = op.regions ? new Set(op.regions) : null;
     const img = g.getImageData(0, 0, W, H), d = img.data;
-    let [r, gr, b] = op.c === 'rainbow' || op.magic ? [0, 0, 0] : rgbOf(op.c);
+    const flat = op.c === 'rainbow' || op.magic ? [0, 0, 0] : rgbOf(op.c);
+    const selectedRegions = op.regions ? new Map(op.regions.map(k => [k, flat])) : null;
+    for (const [k, color] of op.details || []) selectedRegions.set(k, rgbOf(color));
+    let [r, gr, b] = flat;
     for (let i = 0; i < W * H; i++) if (area ? area[i] : selectedRegions.has(ids[i])) {
       if (op.magic) { r = soft[0][i]; gr = soft[1][i]; b = soft[2][i]; }               // волшебная палочка: настоящие цвета картинки
       else if (op.c === 'rainbow') [r, gr, b] = rainbow(Math.floor(i / W) / H + (i % W) / W / 3);
+      else if (selectedRegions) [r, gr, b] = selectedRegions.get(ids[i]);
       d[i * 4] = r; d[i * 4 + 1] = gr; d[i * 4 + 2] = b; d[i * 4 + 3] = 255;
     }
     g.putImageData(img, 0, 0);
@@ -602,10 +658,12 @@ async function openPage(x, id, back, options = {}) {
   const scratch = canvasOf(W, H), sc = scratch.getContext('2d');
   function clipOf(op) {
     if (!op.clip) return null;
-    const area = floodFill(mask, W, H, op.clip[0], op.clip[1], 0);
-    if (!area) return null;
+    const region = revised ? regionAt(...op.clip) : -1;
+    const area = region < 0 ? floodFill(mask, W, H, op.clip[0], op.clip[1], 0) : null;
+    if (!(area || region >= 0)) return null;
+    const ids = region >= 0 ? spots(mask, W, H).id : null;
     const c = canvasOf(W, H), g = c.getContext('2d'), img = g.createImageData(W, H);
-    for (let i = 0; i < area.length; i++) if (area[i]) img.data[i * 4 + 3] = 255;
+    for (let i = 0; i < W * H; i++) if (area ? area[i] : ids[i] === region) img.data[i * 4 + 3] = 255;
     g.putImageData(img, 0, 0);
     return c;
   }
@@ -635,7 +693,12 @@ async function openPage(x, id, back, options = {}) {
     const [px, py] = pos(e);
     if (game) return gameTap(px, py);
     remember();
-    if (tool === 'fill' || tool === 'magic') { const op = { t: 'fill', x: px, y: py, c: color, magic: tool === 'magic' ? 1 : 0 }; doFill(pg, op); log(op); return sfx('pop'); }
+    if (tool === 'fill' || tool === 'magic') {
+      const op = { t: 'fill', x: px, y: py, c: color, magic: tool === 'magic' ? 1 : 0 };
+      const region = revised ? regionAt(px, py) : -1;
+      if (region >= 0) op.regions = [region];
+      doFill(pg, op); log(op); return sfx('pop');
+    }
     if (tool === 'stamp') { const op = { t: 'stamp', x: px, y: py, e: stamp, size }; doStamp(pg, op); log(op); return sfx('pop'); }
     try { paint.setPointerCapture(e.pointerId); } catch { /* не страшно */ }
     pointer = e.pointerId;
@@ -680,12 +743,13 @@ async function openPage(x, id, back, options = {}) {
     palette = item.lineArt ? ['#8ecae6', '#ffca3a', '#ff595e', '#8ac926', '#a78bda', '#ff924c'].map(rgbOf) : [];
     regions = [];
     for (let k = 0; k < n; k++) {
-      if (k === bg || sz[k] < 260) continue;
+      if ((k === bg && (!revised || item.art)) || sz[k] < (revised ? 75 : 260)) continue;
       const c = sum[k].map(v => v / sz[k]);
-      if (!item.lineArt && Math.min(...c) > 232) continue;                // белые места цветного исходника остаются белыми
+      const paper = revised ? Math.min(...c) > 217 && c.reduce((a, b) => a + b) > 700 : Math.min(...c) > 232;
+      if (!item.lineArt && paper) continue; // светлая бумага, блики и облака остаются светлыми
       let pi = item.lineArt ? regions.length % palette.length : palette.findIndex(q => far(q, c) < 50);
       if (pi < 0) { palette.push(c); pi = palette.length - 1; }
-      regions.push({ k, pi, x: best[k] % W, y: Math.floor(best[k] / W), room: dist[best[k]], size: sz[k], done: false, text: '' });
+      regions.push({ k, pi, x: best[k] % W, y: Math.floor(best[k] / W), room: dist[best[k]], size: sz[k], shade: hex(item.lineArt ? palette[pi] : c), done: false, text: '' });
     }
     if (item.lineArt) palette = palette.slice(0, regions.length);
     regions.id = id;
@@ -695,7 +759,11 @@ async function openPage(x, id, back, options = {}) {
   let chosen = -1, keys = [];
   const gameNote = h('p', { class: 'paint-feedback', role: 'status', hidden: true });
   function usePalette(limit) {
-    const grouped = groupPaints(originalPalette, originalRegions, limit);
+    const lead = revised ? guidePaint(originalRegions, W, game === 'num' ? 16 : 22) : originalRegions;
+    const used = [...new Set(lead.map(g => g.pi))].sort((a, b) => a - b);
+    const grouped = revised
+      ? groupPaints(used.map(i => originalPalette[i]), lead.map(g => ({ ...g, pi: used.indexOf(g.pi) })), Math.min(7, limit), true)
+      : groupPaints(originalPalette, lead, limit);
     palette = grouped.palette;
     regions = grouped.regions;
     regions.id = originalRegions.id;
@@ -739,10 +807,11 @@ async function openPage(x, id, back, options = {}) {
     const d = pg.getImageData(0, 0, W, H).data;
     for (const g of regions) { const i = (g.y * W + g.x) * 4; g.done = d[i + 3] > 128 && far([d[i], d[i + 1], d[i + 2]], palette[g.pi]) < 24; }
     tg.clearRect(0, 0, W, H);
+    const visible = revised ? null : new Set(guidePaint(regions.filter(g => !g.done && !tight(g)), W, game === 'num' ? 16 : 22).map(g => g.k));
     for (const g of regions) {
-      if (g.done) continue;
-      if (tight(g)) continue; // слишком тесно для подписи — такой участок закрасится сам вместе с первым верным ответом этого цвета
-      const fs = Math.max(15, Math.min(g.text.length > 1 ? 28 : 34, g.room * (g.text.length > 2 ? 0.8 : 1.05)));
+      g.visible = revised ? !g.done : visible.has(g.k);
+      if (!g.visible) continue;
+      const fs = revised && g.text.length === 1 ? 27 : Math.max(15, Math.min(g.text.length > 1 ? 28 : 34, g.room * (g.text.length > 2 ? 0.8 : 1.05)));
       tg.font = `800 ${fs}px "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif`; tg.textAlign = 'center'; tg.textBaseline = 'middle';
       const w = tg.measureText(g.text).width + fs * 0.5, hh = fs * 1.25;
       tg.fillStyle = '#ffffffee'; tg.strokeStyle = '#2b2d42'; tg.lineWidth = 2;
@@ -758,16 +827,18 @@ async function openPage(x, id, back, options = {}) {
     if (chosen < 0) { gameNote.textContent = 'Сначала выбери краску.'; return say(game === 'abc' ? P.gameAbc : P.gameNum); }
     const rect = paint.getBoundingClientRect();
     const labelRadius = Math.min(25, Math.round(12 * W / Math.max(1, rect.width)));
-    const g = targetPaint(regions, regions.id, W, H, px, py, labelRadius, 8);
-    if (!g || g.done) return;
+    const g = targetPaint(regions, regions.id, W, H, px, py, labelRadius, revised ? 12 : 8);
+    if (!g) { gameNote.textContent = 'Нажми на букву или число на рисунке.'; return; }
+    if (g.done) return;
     if (g.pi !== chosen) {
-      gameNote.textContent = game === 'abc' ? 'Поищи краску с такой же буквой.' : 'Проверь ответ и попробуй ещё.';
-      sfx('miss'); stage.classList.add('shake'); setTimeout(() => stage.classList.remove('shake'), 500);
+      gameNote.textContent = game === 'abc' ? `Здесь буква «${g.text}». Найди такую же на палитре.` : 'Проверь ответ и попробуй ещё.';
+      sfx('miss');
       return;
     }
     remember();
     const matches = regions.filter(q => q === g || (q.pi === chosen && tight(q) && !q.done));
     const op = { t: 'fill', regions: matches.map(q => q.k), c: hex(palette[g.pi]) };
+    if (g.details?.length) op.details = g.details.map(q => [q.k, q.shade]);
     doFill(pg, op); log(op);
     sfx('ok'); gameSync();
     if (regions.every(q => q.done) && !item.won) { item.won = 1; store.save(); sfx('island'); say(P.gameDone); }
@@ -775,23 +846,28 @@ async function openPage(x, id, back, options = {}) {
   const gameStop = () => { game = null; item.game = null; regions = originalRegions; palette = originalPalette; store.save(); tg.clearRect(0, 0, W, H); setRows(); };
 
   // --- лампочка: подсветить то, что ещё не закрашено ---
+  let hintTimer;
   function bulb() {
     findRegions();
     const d = pg.getImageData(0, 0, W, H).data, { id, size: sz } = spots(mask, W, H), empty = new Int32Array(sz.length);
     for (let i = 0; i < W * H; i++) if (id[i] >= 0 && d[i * 4 + 3] < 128) empty[id[i]]++;
     const img = hg.createImageData(W, H);
     let any = false;
-    const want = k => (game ? regions.some(g => g.k === k && !g.done) : sz[k] > 350 && empty[k] > sz[k] * 0.6);
+    const labelsLeft = game ? regions.filter(g => g.visible) : [];
+    const next = labelsLeft.find(g => chosen === g.pi) || labelsLeft[0];
+    const want = k => (game ? k === next?.k : sz[k] > 350 && empty[k] > sz[k] * 0.6);
     const yes = sz.map((_, k) => want(k));
     for (let i = 0; i < W * H; i++) if (id[i] >= 0 && yes[id[i]] && d[i * 4 + 3] < 128) { img.data[i * 4] = 255; img.data[i * 4 + 1] = 212; img.data[i * 4 + 2] = 59; img.data[i * 4 + 3] = 235; any = true; }
     hg.putImageData(img, 0, 0);
     hint.classList.add('on'); sfx(any ? 'pop' : 'star');
-    setTimeout(() => { hint.classList.remove('on'); hg.clearRect(0, 0, W, H); }, 2600);
+    if (next && game === 'abc') gameNote.textContent = `Найди на палитре букву «${next.text}».`;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => { hint.classList.remove('on'); hg.clearRect(0, 0, W, H); }, 2400);
   }
 
   // --- панели кнопок ---
   const pickOne = (box, cls, el) => box.querySelectorAll('.' + cls).forEach(q => q.classList.toggle('sel', q === el));
-  const colors = h('div', { class: 'board-tools' }), gamePal = h('div', { class: 'board-tools' }), tools = h('div', { class: 'board-tools' });
+  const colors = h('div', { class: 'board-tools' }), gamePal = h('div', { class: 'board-tools paint-palette' }), tools = h('div', { class: 'board-tools' });
   COLORS.forEach((c, i) => { const b = h('button', { class: 'color' + (i ? '' : ' sel') + (c === '#ffffff' ? ' white' : c === 'rainbow' ? ' rainbow' : ''), style: c === 'rainbow' ? '' : `background:${c}`, 'aria-label': 'цвет', onclick: () => { color = c; pickOne(colors, 'color', b); if (tool === 'erase' || tool === 'magic' || tool === 'stamp') setTool('fill'); } }); colors.append(b); });
   function drawPalette() { // цвета с подписями: буква или число
     gamePal.replaceChildren(...palette.map((c, i) => {
@@ -803,6 +879,7 @@ async function openPage(x, id, back, options = {}) {
           chosen = i;
           pickOne(gamePal, 'keyed', b);
           for (const button of gamePal.children) button.setAttribute('aria-pressed', String(button === b));
+          gameNote.textContent = game === 'abc' ? `Найди букву «${label}» на рисунке.` : `Найди пример с ответом ${label}.`;
           sfx('tap'); say(game === 'abc' ? tokL(keys[i]) : label);
         },
       }, h('b', {}, label));
@@ -853,9 +930,10 @@ async function openPage(x, id, back, options = {}) {
     writes = writes.catch(() => {}).then(async () => {
       const [ink, thumbnail] = await frame;
       if (!ink || !thumbnail) throw new Error(P.photoFail);
-      await idb.put('photos', id + '-p', ink);
-      await idb.put('photos', id + '-t', thumbnail);
-      if (operations) { await idb.put('photos', id + '-o', operations); if (!base) item.rec = 1; }
+      const records = [{ store: 'photos', key: id + '-p', blob: ink }, { store: 'photos', key: id + '-t', blob: thumbnail }];
+      if (operations) records.push({ store: 'photos', key: id + '-o', blob: operations });
+      await idb.putBatch(records);
+      if (operations && !base) item.rec = 1;
       store.save();
     });
     return writes;
@@ -891,7 +969,6 @@ async function openPage(x, id, back, options = {}) {
   };
   const finish = async () => {
     if (busy) return;
-    if (!dirty && !saved) return say(P.needDraw2);
     if (options.onBuild) {
       if (!game || !regions.length || !regions.every(g => g.done)) {
         gameNote.textContent = 'Сначала закончи раскраску.';
@@ -909,6 +986,7 @@ async function openPage(x, id, back, options = {}) {
       finally { busy = false; }
       return;
     }
+    if (!dirty && !saved) return say(P.needDraw2);
     keepArt(store, compose(480).toDataURL('image/jpeg', 0.78));
     const fresh = heroColors();
     sfx('star');
@@ -992,7 +1070,9 @@ async function openPage(x, id, back, options = {}) {
     const c = canvasOf(W, H), ctx = c.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
     const pixels = ctx.getImageData(0, 0, W, H);
-    const byId = new Map(regions.map(region => [region.k, palette[region.pi]]));
+    const byId = new Map(regions.flatMap(region => [
+      [region.k, palette[region.pi]], ...(region.details || []).map(detail => [detail.k, rgbOf(detail.shade)]),
+    ]));
     for (let i = 0; i < W * H; i++) {
       const rgb = byId.get(regions.id[i]);
       if (rgb) { pixels.data[i * 4] = rgb[0]; pixels.data[i * 4 + 1] = rgb[1]; pixels.data[i * 4 + 2] = rgb[2]; }
@@ -1016,11 +1096,23 @@ async function openPage(x, id, back, options = {}) {
     } finally { sampleButton.disabled = false; }
   } }, 'Цветной пример');
   const stage = h('div', { class: 'board-stage', style: `aspect-ratio:${W}/${H};--ar:${(W / H).toFixed(3)}` }, paint, lines, labels, hint);
-  screen('level', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), h('span', { class: 'grow' }),
+  if (options.onBuild) {
+    findRegions();
+    if (!regions.length) {
+      if (!saved && !ops.length) {
+        const list = store.part('colorings', []);
+        list.splice(list.indexOf(item), 1); dropPage(id); store.save();
+      }
+      options.onUnavailable?.(id, 'На рисунке не нашлось отдельных областей. Выбери другой файл.');
+      return;
+    }
+    options.onDraft?.(id);
+  }
+  screen('level paint-screen', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), h('span', { class: 'grow' }),
     ibtn('💡', 'подсказка: что ещё не закрашено', bulb), ibtn('↩️', 'шаг назад', stepBack, 'undo'),
-    h('button', { class: 'check', 'aria-label': options.onBuild ? 'собрать объёмный рисунок' : 'готово', onclick: finish }, options.onBuild ? '🧱' : '✔'),
+    !options.onBuild && h('button', { class: 'check', 'aria-label': 'готово', onclick: finish }, '✔'),
     ibtn('🔊', 'послушать', () => say(game === 'abc' ? P.gameAbc : game === 'num' ? P.gameNum : P.photoReady), 'speak')),
-  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, gameNote, stamps, tools, modes, more,
+  h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, gameNote, stamps, tools, !options.onBuild && modes, !options.onBuild && more,
     h('div', { class: 'board-tools' }, sampleButton, options.onBuild && h('button', { type: 'button', class: 'reward-action', onclick: finish }, 'Собрать объёмный рисунок')))), sample);
   setRows();
   if (options.onBuild) gameStart('abc');

@@ -26,7 +26,9 @@ import { openParent } from './parent.js';
 import { penScreen, penCount, sampleSVG } from './pen.js';
 import { PEN_TASKS } from './cursive.js';
 
-const store = createStore(localStorage);
+const params = new URLSearchParams(location.search);
+const tryColoring = params.get('try') === 'coloring';
+const store = createStore(tryColoring ? { getItem: () => null, setItem() {} } : localStorage);
 const app = document.getElementById('app');
 setVoiceConfig(store.settings);
 
@@ -215,6 +217,31 @@ function islandPainting(isl, back) {
     },
   };
   return options;
+}
+
+function startColoringTrial() {
+  const drawings = new Map(), island = ISLANDS[0], art = ARTWORK[0];
+  const media = {
+    get: async (_, key) => drawings.get(key),
+    put: async (_, key, blob) => { drawings.set(key, blob); },
+    del: async (_, key) => { drawings.delete(key); },
+    putBatch: async records => { for (const { key, blob } of records) drawings.set(key, blob); },
+  };
+  const trial = { ...X, media };
+  const goToSchool = () => location.assign(location.pathname);
+  const options = {
+    title: art.title, backLabel: 'К школе',
+    onUnavailable: (_, note) => screen('library',
+      h('h1', {}, art.title), h('p', { role: 'status' }, note),
+      h('button', { class: 'reward-action', onclick: paint }, 'Попробовать снова'),
+      h('button', { class: 'reward-action', onclick: goToSchool }, 'К школе')),
+    onBuild: async picture => {
+      if (!islandAssembly(store, island)) await saveAssemblyPicture(store, island, picture, media);
+      await assemblyScreen(trial, island, picture, paint, 'К раскраске');
+    },
+  };
+  const paint = () => openArtwork(trial, art, goToSchool, options);
+  void paint();
 }
 
 function islandReward(isl, back, compact = false) {
@@ -426,10 +453,10 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:' && !localDev) 
 // Для отладки: показать любые задания по рецептам, не трогая прогресс.
 window.__fun = { reward: id => { const L = LEVELS.find(l => l.id === id); reward(L, 3, store.finishLevel(L, 3).sticker, true); }, placement: () => placement(X, map), showDad: id => showDad(X, ISLANDS.find(i => i.id === id), map), dayDone: () => dayDone(X) };
 window.__play = srcs => playLevel({ id: 'demo', island: 0, k: 0, intro: '', tasks: srcs, demo: true });
-loadClips();
+if (!tryColoring) loadClips();
 initVoice();
 // Счётчик для владельца: «приложение открыли» — раз в день, без каких-либо данных о ребёнке (см. counter.js).
-countVisit({ storage: localStorage, day: today(), host: location.hostname, standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true });
+if (!tryColoring) countVisit({ storage: localStorage, day: today(), host: location.hostname, standalone: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true });
 document.addEventListener('pointerdown', unlockAudio, { once: true, capture: true });
 // Напоминание о занятии: пока приложение открыто или свёрнуто, раз в минуту смотрим на часы.
 let reminded = '';
@@ -440,7 +467,6 @@ setInterval(() => {
   if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') navigator.serviceWorker?.ready.then(r => r.showNotification('Школа Камиля', { body: text, icon: 'icons/icon-192.png' })).catch(() => {});
   else if (app.classList.contains('map') || app.classList.contains('welcome')) { const b = h('button', { class: 'toast', onclick: () => b.remove() }, '⏰ ' + text); document.body.append(b); setTimeout(() => b.remove(), 15000); }
 }, 60000);
-const params = new URLSearchParams(location.search);
 function openProfile(link = null) {
   if (link) {
     const target = store.profileForLink(link);
@@ -467,7 +493,8 @@ function entry() {
       h('p', { role: 'status' }, error.message), h('button', { type: 'button', class: 'pbtn', onclick: () => openProfile() }, 'К школе')));
   }
 }
-if (params.has('selftest')) selftest();
+if (tryColoring) startColoringTrial();
+else if (params.has('selftest')) selftest();
 else if (params.has('glyphs')) { // для отладки: все образцы письменных букв на одном листе
   app.className = 'screen';
   app.replaceChildren(h('div', { class: 'pen-grid' }, PEN_TASKS.map(t => h('div', { class: 'pen-card', html: sampleSVG(t) + `<small>${t.title}</small>` }))));

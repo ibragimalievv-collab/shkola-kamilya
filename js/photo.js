@@ -383,11 +383,11 @@ async function bitmap(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return createImageBitmap(file); }
 }
 const rewardDraft = item => item.islandDraft || item.art?.startsWith('island-');
-function trimColorings(list) {
+function trimColorings(list, media = idb) {
   const ordinary = list.filter(item => !rewardDraft(item));
   for (const item of ordinary.slice(KEEP)) {
     list.splice(list.indexOf(item), 1);
-    dropPage(item.id);
+    dropPage(item.id, media);
   }
 }
 // Сделать раскраску из файла и запомнить её. Возвращает её номер.
@@ -405,7 +405,7 @@ export async function addPage(store, file, islandDraft) {
   return id;
 }
 // Готовая картинка (зверёк-наклейка или помощник) как раскраска. key — её имя, чтобы не заводить вторую такую же.
-export async function addArtPage(store, key, source, lineArt = false) {
+export async function addArtPage(store, key, source, lineArt = false, media = idb) {
   const list = store.part('colorings', []), old = list.find(it => it.art === key);
   if (old) return old.id;
   const raster = source instanceof Blob;
@@ -425,13 +425,13 @@ export async function addArtPage(store, key, source, lineArt = false) {
   g.drawImage(img, pad, pad, w, hh);
   img.close?.();
   const id = 'cl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  await idb.put('photos', id, await toBlob(c));
+  await media.put('photos', id, await toBlob(c));
   list.unshift({ id, d: today(), v: 2, art: key, rec: 1, ...(lineArt ? { lineArt: true, game: 'abc' } : {}) });
-  trimColorings(list);
+  trimColorings(list, media);
   store.save();
   return id;
 }
-const dropPage = id => { for (const k of [id, id + '-p', id + '-t', id + '-o']) idb.del('photos', k).catch(() => {}); };
+const dropPage = (id, media = idb) => { for (const k of [id, id + '-p', id + '-t', id + '-o']) media.del('photos', k).catch(() => {}); };
 
 export async function openArtwork(x, art, back, options = {}) {
   try {
@@ -440,7 +440,7 @@ export async function openArtwork(x, art, back, options = {}) {
     if (!page) {
       const response = await fetch(art.src);
       if (!response.ok) throw new Error(P.photoFail);
-      page = await addArtPage(x.store, key, await response.blob());
+      page = await addArtPage(x.store, key, await response.blob(), false, x.media);
     }
     await openPage(x, page, back, options);
   } catch { x.say(P.photoFail); if (options.onUnavailable) options.onUnavailable(null, 'Не удалось открыть эту картинку. Попробуй другую.'); else back(P.photoFail); }
@@ -540,10 +540,10 @@ const far = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a
 const sleep = ms => new Promise(f => setTimeout(f, ms));
 
 async function openPage(x, id, back, options = {}) {
-  const { store, screen, ibtn, say } = x;
+  const { store, screen, ibtn, say, media = idb } = x;
   const item = store.part('colorings', []).find(it => it.id === id);
   let src = null, saved = null, oldOps = null;
-  try { src = await idb.get('photos', id); saved = await idb.get('photos', id + '-p'); const o = await idb.get('photos', id + '-o'); if (o) oldOps = JSON.parse(await o.text()); } catch { /* ниже скажем, что не получилось */ }
+  try { src = await media.get('photos', id); saved = await media.get('photos', id + '-p'); const o = await media.get('photos', id + '-o'); if (o) oldOps = JSON.parse(await o.text()); } catch { /* ниже скажем, что не получилось */ }
   if (!src || !item) return back(P.photoFail);
   const bmp = await createImageBitmap(src), W = bmp.width, H = bmp.height, photo = item.v && !item.art;
   const layer = cls => { const c = canvasOf(W, H); c.className = 'layer ' + cls; return c; };
@@ -932,7 +932,7 @@ async function openPage(x, id, back, options = {}) {
       if (!ink || !thumbnail) throw new Error(P.photoFail);
       const records = [{ store: 'photos', key: id + '-p', blob: ink }, { store: 'photos', key: id + '-t', blob: thumbnail }];
       if (operations) records.push({ store: 'photos', key: id + '-o', blob: operations });
-      await idb.putBatch(records);
+      await media.putBatch(records);
       if (operations && !base) item.rec = 1;
       store.save();
     });
@@ -981,13 +981,13 @@ async function openPage(x, id, back, options = {}) {
         if (!picture) throw new Error(P.photoFail);
         await keep();
         await options.onBuild(picture);
-        void keepArt(store, compose(480).toDataURL('image/jpeg', 0.78));
+        void keepArt(store, compose(480).toDataURL('image/jpeg', 0.78), media);
       } catch { say(P.photoFail); }
       finally { busy = false; }
       return;
     }
     if (!dirty && !saved) return say(P.needDraw2);
-    keepArt(store, compose(480).toDataURL('image/jpeg', 0.78));
+    keepArt(store, compose(480).toDataURL('image/jpeg', 0.78), media);
     const fresh = heroColors();
     sfx('star');
     leave(fresh ? P.heroNew : P.photoSaved);
@@ -998,7 +998,7 @@ async function openPage(x, id, back, options = {}) {
     await writes.catch(() => {});
     const list = store.part('colorings', []), i = list.indexOf(item);
     if (i >= 0) list.splice(i, 1);
-    dropPage(id); store.save(); back();
+    dropPage(id, media); store.save(); back();
   };
   const print = () => { // лист А4: раскраска как есть (нераскрашенную можно красить карандашами, поделку — вырезать)
     document.getElementById('print')?.remove();
@@ -1101,17 +1101,18 @@ async function openPage(x, id, back, options = {}) {
     if (!regions.length) {
       if (!saved && !ops.length) {
         const list = store.part('colorings', []);
-        list.splice(list.indexOf(item), 1); dropPage(id); store.save();
+        list.splice(list.indexOf(item), 1); dropPage(id, media); store.save();
       }
       options.onUnavailable?.(id, 'На рисунке не нашлось отдельных областей. Выбери другой файл.');
       return;
     }
     options.onDraft?.(id);
   }
-  screen('level paint-screen', h('div', { class: 'bar' }, ibtn('◀', 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), h('span', { class: 'grow' }),
+  screen('level paint-screen', h('div', { class: 'bar' }, ibtn('◀', options.backLabel || 'к раскраскам', () => leave()), twice(ibtn('🗑️', 'убрать эту раскраску: нажать два раза', remove, 'small')), h('span', { class: 'grow' }),
     ibtn('💡', 'подсказка: что ещё не закрашено', bulb), ibtn('↩️', 'шаг назад', stepBack, 'undo'),
     !options.onBuild && h('button', { class: 'check', 'aria-label': 'готово', onclick: finish }, '✔'),
     ibtn('🔊', 'послушать', () => say(game === 'abc' ? P.gameAbc : game === 'num' ? P.gameNum : P.photoReady), 'speak')),
+  options.title && h('h1', { class: 'artwork-title' }, options.title),
   h('div', { class: 'task' }, h('div', { class: 'board' }, stage, colors, gamePal, gameNote, stamps, tools, !options.onBuild && modes, !options.onBuild && more,
     h('div', { class: 'board-tools' }, sampleButton, options.onBuild && h('button', { type: 'button', class: 'reward-action', onclick: finish }, 'Собрать объёмный рисунок')))), sample);
   setRows();

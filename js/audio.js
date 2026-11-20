@@ -66,6 +66,42 @@ export function loadPack(name) {
   if (!loading.has(name)) loading.set(name, voiceFile(pack.file).then(r => { if (!r.ok) throw new Error(); return r.arrayBuffer(); }).then(buf => { loaded.set(name, buf); }).catch(() => { loading.delete(name); }));
   return loading.get(name);
 }
+async function offlinePacks() {
+  await listReady;
+  if (!manifest && typeof caches !== 'undefined') await initVoice();
+  if (!manifest?.packs || typeof caches === 'undefined') throw new Error('Нет списка записей');
+  const packs = Object.values(manifest.packs).map(({ file, items }) => ({
+    url: new URL('audio/' + file, document.baseURI).href,
+    bytes: items.reduce((end, [, offset, length]) => Math.max(end, offset + length), 0),
+  }));
+  const cache = await caches.open('shkola-audio');
+  const keys = new Set((await cache.keys()).map(request => request.url));
+  return { cache, packs, missing: packs.filter(pack => !keys.has(pack.url)) };
+}
+function cacheSummary(total, missing) {
+  return { total, saved: total - missing.length, missing: missing.reduce((sum, pack) => sum + pack.bytes, 0) };
+}
+export async function voiceCacheStatus() {
+  const { packs, missing } = await offlinePacks();
+  return cacheSummary(packs.length, missing);
+}
+let downloadingVoice;
+export function downloadVoice(progress) {
+  if (!downloadingVoice) downloadingVoice = (async () => {
+    const { cache, packs, missing } = await offlinePacks();
+    const manifestURL = new URL('audio/manifest.json', document.baseURI).href;
+    if (!await cache.match(manifestURL)) await cache.put(manifestURL, new Response(JSON.stringify(manifest), { headers: { 'Content-Type': 'application/json' } }));
+    while (missing.length) {
+      const pack = missing[0];
+      const response = await fetch(pack.url);
+      if (!response.ok) throw new Error('Запись недоступна');
+      if (!await cache.match(pack.url)) await cache.put(pack.url, response);
+      missing.shift();
+      progress(cacheSummary(packs.length, missing));
+    }
+  })().finally(() => { downloadingVoice = null; });
+  return downloadingVoice.then(async () => progress(await voiceCacheStatus()));
+}
 // Заранее загрузить все наборы, в которых лежат записи для этих фраз (одна и та же фраза хранится один раз — в наборе того острова, где встретилась впервые).
 export function prepare(texts) {
   const need = new Set();

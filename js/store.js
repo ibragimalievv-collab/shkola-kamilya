@@ -113,9 +113,11 @@ export function createStore(storage, now = () => today()) {
       return api.nextLevel();
     },
     // Записать результат; вернуть, получена ли наклейка за остров.
-    finishLevel(level, stars) {
+    finishLevel(level, stars, result) {
       const isl = ISLANDS[level.island], was = api.islandDone(isl);
       p().levels[level.id] = Math.max(p().levels[level.id] || 0, stars);
+      if (p().skipped) delete p().skipped[level.id];
+      if (result) p().lastLesson = { id: level.id, date: now(), firstTry: result.firstTry, total: result.total };
       day().levels++;
       (day().ids ||= []).push(level.id);
       save();

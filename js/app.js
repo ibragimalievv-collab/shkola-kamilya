@@ -17,7 +17,7 @@ import { shopScreen, shopOpen, mailScreen, mailWaiting, duoScreen } from './extr
 import { reminderDue } from './parent2.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { buildSession, makeTask, adjust, tokW } from './tasks.js';
-import { createStore } from './store.js';
+import { createStore, HERO_DEFAULT } from './store.js';
 import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames, unlockAudio } from './audio.js';
 import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL, tokName } from './phrases.js';
 import { heroSVG, HERO_PARTS, PALETTE, colorButton, animalSVG, islandSVG, starSVG, LINE_COLOR } from './art.js';
@@ -75,8 +75,8 @@ async function saveRead(blob, text) {
 // С чего начать: раскрасить помощника → нарисовать своего героя → игра-разведка (только для новичка) → карта.
 function start() {
   const p = store.profile;
-  if (!p.heroDone) return paintHero(start);
-  if (!p.pet && !p.petSkipped) return drawPet(X, () => { p.petSkipped = true; store.save(); start(); });
+  if (!p.heroDone) return paintHero(start, welcome);
+  if (!p.pet && !p.petSkipped) return drawPet(X, () => { p.petSkipped = true; store.save(); start(); }, resume => paintHero(resume, welcome));
   if (!p.placed && !Object.keys(p.levels).length) return placement(X, start);
   map();
 }
@@ -103,25 +103,54 @@ function welcome() {
 }
 
 // ---------- раскрась своего помощника ----------
-function paintHero(back) {
+function paintHero(done, back = map) {
   let color = PALETTE[0];
   const box = hero('happy', 'big');
-  const redraw = () => { box.innerHTML = heroSVG(store.profile.hero, 'happy'); };
+  const history = [];
+  const draft = { ...store.profile.hero };
+  let erasing = false;
+  const undo = h('button', { class: 'edit-action', disabled: true, onclick: () => {
+    const { part, before } = history.pop();
+    draft[part] = before;
+    redraw();
+  } }, '↶ Отменить');
+  const erase = h('button', { class: 'edit-action', 'aria-pressed': 'false', onclick: () => setErase(!erasing) }, 'Ластик');
+  const hint = h('p', { class: 'edit-hint', role: 'status' });
+  const setErase = enabled => {
+    erasing = enabled;
+    erase.setAttribute('aria-pressed', String(enabled));
+    for (const swatch of pal.querySelectorAll('button')) {
+      const active = !enabled && swatch.dataset.paint === color;
+      swatch.classList.toggle('sel', active);
+      swatch.setAttribute('aria-pressed', String(active));
+    }
+    hint.textContent = enabled ? 'Нажми на часть героя, чтобы вернуть её исходный цвет.' : 'Выбери цвет и нажми на героя.';
+  };
+  const redraw = () => { box.innerHTML = heroSVG(draft, 'happy'); undo.disabled = !history.length; };
   box.addEventListener('click', e => {
     const part = e.target.closest('[data-part]')?.dataset.part;
     if (!part || !HERO_PARTS.includes(part)) return;
-    store.profile.hero[part] = color;
+    const value = erasing ? HERO_DEFAULT[part] : color;
+    if (draft[part] === value) return;
+    history.push({ part, before: draft[part] });
+    draft[part] = value;
     sfx('pop');
     redraw();
   });
   const colors = [...PALETTE, ...store.part('gifts', { colors: [], badges: [], last: 0 }).colors]; // плюс краски-сюрпризы
-  const pal = h('div', { class: 'palette' }, colors.map(c => colorButton(c, c === color, selected => {
-    color = selected;
-    sfx('tap');
-  })));
+  const pal = h('div', { class: 'palette' }, colors.map(c => {
+    const button = colorButton(c, c === color, selected => { color = selected; setErase(false); sfx('tap'); });
+    button.dataset.paint = c;
+    return button;
+  }));
+  setErase(false);
   const text = P.paint;
-  screen('hero-paint', h('div', { class: 'bar' }, ibtn('🔊', 'послушать ещё раз', () => say(text))), box, pal,
-    ibtn('▶', 'готово', () => { store.profile.heroDone = true; store.save(); (back || map)(); }, 'play'));
+  screen('hero-paint', h('div', { class: 'edit-actions' },
+    h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: back }, '‹ Назад'), undo, erase,
+    ibtn('🔊', 'послушать ещё раз', () => say(text), 'small')), hint, box, pal,
+    h('button', { class: 'edit-action edit-done', 'aria-label': 'готово', onclick: () => {
+      store.profile.hero = draft; store.profile.heroDone = true; store.save(); done();
+    } }, 'Готово ✓'));
   say(text);
 }
 
@@ -129,11 +158,13 @@ function paintHero(back) {
 function map() {
   const next = store.dayDone() ? store.nextLevel() : store.nextForToday();
   const days = store.streak(), fresh = homeNew(store);
+  const notice = h('p', { class: 'map-note', role: 'status' });
+  const explain = message => { notice.textContent = message; say(message); };
   const cards = ISLANDS.map(isl => {
     const open = store.islandOpen(isl), done = store.islandDone(isl);
     const got = isl.levels.filter(l => store.stars(l.id)).length;
     return h('button', { class: `island${open ? '' : ' locked'}${done ? ' done' : ''}${next && next.island === isl.n ? ' here' : ''}`, style: `--col:${LINE_COLOR[isl.line]}`,
-      'aria-label': isl.title, onclick: () => { sfx('tap'); open ? island(isl) : say(P.islandLocked); } },
+      'aria-label': isl.title, onclick: () => { sfx('tap'); open ? island(isl) : explain(store.profile.overrides[isl.id] === 'closed' ? 'Этот остров закрыт в настройках для родителей.' : P.islandLocked); } },
       h('span', { class: 'inum' }, isl.n + 1),
       h('span', { html: islandSVG(isl.line, !open) }),
       islandRewardOpen(store, isl) ? h('img', { class: 'isticker reward-thumb', src: artForIsland(isl).src, alt: '' })
@@ -142,6 +173,14 @@ function map() {
       next && next.island === isl.n ? petImg(store, 'pet onmap') : null,
       h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` })));
   });
+  const sea = h('div', { id: 'island-map', class: 'sea compact' }, cards);
+  const locked = cards.filter(card => card.classList.contains('locked')).length;
+  const fold = h('button', { class: 'edit-action', 'aria-controls': 'island-map', 'aria-expanded': 'false', onclick: () => {
+    const compact = sea.classList.toggle('compact');
+    fold.setAttribute('aria-expanded', String(!compact));
+    fold.textContent = compact ? 'Показать закрытые острова (' + locked + ')' : 'Скрыть закрытые острова';
+    notice.textContent = '';
+  } }, 'Показать закрытые острова (' + locked + ')');
   const hi = helloText() + (days >= 2 ? ' ' + P.streak(days) : '');
   if (next) { loadPack(ISLANDS[next.island].id); const after = ISLANDS[next.island + 1]; if (after) loadPack(after.id); } // подгружаем голос для ближайших островов
   const pens = penCount(store);
@@ -158,15 +197,14 @@ function map() {
 
     h('div', { class: 'bar places' },
       ibtn('✉️', 'письма от Лумика', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
-      ibtn('🛒', 'магазин игрушек', () => shopScreen(X, map), shopOpen(store) ? '' : 'dim'),
+      ibtn('🛒', 'магазин игрушек', () => shopOpen(store) ? shopScreen(X, map) : explain(P.shopLocked), shopOpen(store) ? '' : 'dim'),
       ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map)),
       ibtn('🎨', 'раскраски', () => photoScreen(X, map)),
       // Кнопка для взрослых — с подписью, чтобы родители сразу видели, куда им заходить (внутри — задачка на умножение).
       h('button', { class: 'parent-btn', 'aria-label': 'настройки для родителей', onclick: () => { sfx('tap'); openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }); } },
         h('span', {}, '⚙️'), h('span', { class: 'parent-txt' }, h('b', {}, 'Настройки'), h('small', {}, 'для родителей')))),
-    h('div', { class: 'sea' }, cards),
-    next ? ibtn('▶', 'играть дальше', () => playLevel(next), 'play float') : null);
-  app.querySelector('.island.here')?.scrollIntoView({ block: 'center' });
+    next ? h('button', { class: 'map-next', 'aria-label': 'играть дальше', onclick: () => { sfx('tap'); playLevel(next); } },
+      '▶ Продолжить', h('small', {}, next.title)) : null, notice, sea, locked ? fold : null);
   if (!greeted) { greeted = true; say(hi); }
 }
 
@@ -304,7 +342,8 @@ function playLevel(level) {
     queue.splice(Math.min(2, queue.length), 0, makeTask(['famW', word, Math.random() < 0.5 ? 'pick' : 'build', fam.filter(w => w !== word).slice(0, 3)], r));
   }
   prepare([level.intro, ...queue.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...queue.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
-  let solved = 0, misses = 0, t0 = Date.now(), alive = true;
+  const total = queue.length;
+  let firstTry = 0, solved = 0, misses = 0, t0 = Date.now(), alive = true;
   let ease = 0, okRow = 0, failRow = 0; // подстройка сложности: -1 проще, 0 как есть, +1 труднее
   const leave = () => { alive = false; store.addTime((Date.now() - t0) / 1000); island(isl); };
 
@@ -343,6 +382,7 @@ function playLevel(level) {
         if (m === 0 && (t.fromWeak || t.retry)) store.fixWeak(t.src);
         // Серия верных ответов с первой попытки — можно чуть труднее; после упрощения возвращаемся к обычному.
         if (m === 0) { okRow++; failRow = 0; if (ease < 0 && okRow >= 3) ease = 0; else if (ease === 0 && okRow >= 5) ease = 1; } else { okRow = 0; if (ease > 0) ease = 0; }
+        if (!t.retry && m === 0) firstTry++;
         solved++;
         setTimeout(next, delay);
       },
@@ -373,7 +413,7 @@ function playLevel(level) {
     store.addTime((Date.now() - t0) / 1000);
     const first = !store.stars(level.id);
     const wasReady = islandRewardOpen(store, isl);
-    const res = store.finishLevel(level, stars);
+    const res = store.finishLevel(level, stars, { firstTry, total });
     reward(level, stars, res.sticker, first, !wasReady && islandRewardOpen(store, isl));
   }
 }
@@ -390,6 +430,7 @@ function reward(level, stars, sticker, first, artUnlocked = false) {
   screen('reward', h('div', { class: 'confetti' }, Array.from({ length: 24 }, (_, i) => h('i', { style: `--x:${(i * 37) % 100}%;--c:${PALETTE[i % 9]};--t:${1.6 + (i % 5) * 0.3}s;--dl:${(i % 7) * 0.12}s` }))),
     h('div', { class: 'stars huge', html: [1, 2, 3].map(i => starSVG(i <= stars)).join('') }),
     hero('happy', 'big bounce'),
+    h('div', { class: 'lesson-result' }, h('strong', {}, level.title), h('small', {}, 'Цель урока — ' + level.goal.toLocaleLowerCase('ru') + '.')),
     sticker || artUnlocked ? islandReward(isl, () => island(isl)) : null,
     story, gift?.el,
     h('div', { class: 'opts' }, ibtn('🗺️', 'на карту', map), ibtn('▶', 'дальше', go, 'play')));

@@ -3,7 +3,7 @@
 import { h, today, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { LINES, lineOf, labelOf } from './tasks.js';
-import { say, hush, sfx, russianVoices, voicedNames, loadClips, setVoiceConfig } from './audio.js';
+import { say, hush, sfx, russianVoices, voicedNames, loadClips, setVoiceConfig, voiceCacheStatus, downloadVoice } from './audio.js';
 import { P } from './phrases.js';
 import { penParent } from './pen.js';
 import { voiceStudio, clipCell } from './voice.js';
@@ -89,6 +89,27 @@ function parentScreen(ctx) {
     h('label', {}, 'Дневной лимит ', limit),
     h('p', { class: 'hint' }, 'После трёх уровней подряд помощник сам предлагает отдохнуть. Когда дневной лимит исчерпан, новые уровни в этот день не открываются.'));
 
+  const voiceNote = h('p', { class: 'hint', role: 'status' });
+  let downloading = false, complete = false;
+  function showCache(info) {
+    complete = !info.missing;
+    voiceNote.textContent = info.missing ? 'На устройстве ' + info.saved + ' из ' + info.total + ' наборов. Осталось скачать ' + Math.ceil(info.missing / 1e6) + ' МБ.'
+      : 'Вся записанная озвучка сохранена на этом устройстве (' + info.total + ' наборов).';
+    getVoice.disabled = downloading || complete;
+  }
+  const getVoice = btn('Скачать озвучку для дороги', async () => {
+    downloading = true; getVoice.disabled = true;
+    try { await downloadVoice(showCache); }
+    catch { voiceNote.textContent = 'Загрузка прервалась. Проверьте интернет и свободное место. Сохранённые наборы останутся, можно продолжить.'; }
+    finally { downloading = false; getVoice.disabled = complete; }
+  });
+  const road = card('Озвучка без интернета', voiceNote, getVoice);
+  const refreshVoice = () => {
+    if (!downloading) voiceCacheStatus().then(info => { if (!downloading) showCache(info); }).catch(() => {
+      if (!downloading) voiceNote.textContent = 'Список записей недоступен. Откройте игру с интернетом и попробуйте ещё раз.';
+    });
+  };
+
   // --- острова ---
   const islands = card('Острова: открыть или закрыть', h('div', { class: 'isl-list' }, ISLANDS.map(isl => {
     const got = isl.levels.filter(l => p.levels[l.id]).length;
@@ -156,17 +177,21 @@ function parentScreen(ctx) {
   const tile = (num, label) => h('div', { class: 'ptile' }, h('b', {}, num), h('span', {}, label));
   const totals = card('Что пройдено', h('div', { class: 'ptiles' },
     tile(`${doneL} из ${LEVELS.length}`, 'уровней'), tile(`${doneI} из ${ISLANDS.length}`, 'островов и наклеек'), tile(starsAll, 'звёзд'), tile(store.streak(), 'дней подряд'), tile(p.weak.length, 'заданий на повторении')));
+  const last = p.lastLesson, lesson = LEVELS.find(level => level.id === last?.id);
+  const recent = lesson ? card('Последний урок · ' + lesson.title,
+    h('p', {}, 'Цель — ' + lesson.goal.toLocaleLowerCase('ru') + '.'),
+    h('p', {}, 'Заданий с первой попытки: ' + last.firstTry + ' из ' + last.total + '.')) : null;
   // Разделы: сверху — закладки, под ними — карточки выбранного раздела.
   const [check, summary, family, reading, remind, tools] = parentExtras({ store, again, app, placement: ctx.placement });
   const TABS = [
-    ['📊 Успехи', 'что пройдено и где ошибки', [totals, weak, progress, summary, time]],
+    ['📊 Успехи', 'что пройдено и где ошибки', [recent, totals, weak, progress, summary, time]],
     ['👦 Ребёнок', 'имя, альбом рисунков, свои слова, тетрадь', [profiles, albumCard(store, again), family, reading, penParent({ store, again, app }), tools]],
     ['🎙 Голос', 'записи и проверка слов', [voiceStudio(), check]],
-    ['⚙️ Настройки', 'звук, лимит, острова, перенос', [settings, remind, islands, data]],
+    ['⚙️ Настройки', 'звук, лимит, острова, перенос', [road, settings, remind, islands, data]],
   ];
   const body = h('div', { class: 'ptab-body' });
   const tabs = h('div', { class: 'ptabs' }, TABS.map(([title, sub, cards], i) => h('button', { class: 'ptab', onclick: () => show(i) }, h('b', {}, title), h('small', {}, sub))));
-  const show = i => { tabNow = i; [...tabs.children].forEach((b, k) => b.classList.toggle('on', k === i)); body.replaceChildren(...TABS[i][2].filter(Boolean)); app.scrollTop = 0; };
+  const show = i => { tabNow = i; if (i === 3) refreshVoice(); [...tabs.children].forEach((b, k) => b.classList.toggle('on', k === i)); body.replaceChildren(...TABS[i][2].filter(Boolean)); app.scrollTop = 0; };
   app.replaceChildren(h('div', { class: 'bar' }, h('button', { class: 'ibtn', 'aria-label': 'назад', onclick: back }, '🗺️'), h('h1', {}, `Для родителей · ${p.name}`)), tabs, body);
   show(tabNow);
   app.scrollTop = 0;

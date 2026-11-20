@@ -619,3 +619,9 @@ svg { display: block; width: 100%; height: 100%; }
   #app.pet-draw .board-stage { justify-self: center; width: min(100%, 58dvh * var(--ar)); }
   #app.hero-paint .hero-box.big { width: 30vmin; height: 30vmin; }
 }
+.adult-dialog { max-width: min(92vw, 26rem); color: var(--ink); border: 0; border-radius: 1rem; padding: 1.25rem; }
+.adult-dialog::backdrop { background: #172b40aa; }
+.adult-dialog h2 { margin-top: 0; }
+.adult-dialog input { font: inherit; width: 4em; min-height: 44px; }
+.privacy-link { color: #245373; font-size: clamp(14px, 2vmin, 18px); padding: .5rem; }
+.first-book { flex: none; }

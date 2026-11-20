@@ -1,3 +1,5 @@
+import { adultAction } from './adult.js';
+import { toggleRecording } from './record.js';
 // ИГРОВЫЕ МЕХАНИКИ: как каждое задание выглядит на экране и как на него отвечают.
 // Каждая механика получает задание t и «пульт» c:
 //   c.root — куда рисовать;  c.ok() — решено верно;  c.miss() — ошибка (мягкая подсказка);
@@ -488,34 +490,23 @@ function clock(t, c) {
 
 // ---------- 36. Чтение вслух с записью ----------
 function readaloud(t, c) {
-  let rec = null, blob = null, url = null;
+  let blob = null, url = null, allowed = false;
   const mine = new Audio();
   const mic = B(c, 'drum mic', '🎤', toggle), me = B(c, 'ibtn', '👂', () => playMine()), sample = B(c, 'ibtn speak', '🔊', () => c.say(t.sample)), okBtn = check(c, finish);
   me.disabled = okBtn.disabled = true;
   const playMine = then => { c.say(''); mine.onended = then || null; mine.currentTime = 0; mine.play().catch(() => then?.()); };
-  async function toggle() {
-    if (rec) return rec.stop();
-    let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-    catch { okBtn.disabled = false; return c.say(P.noMic); }
-    const chunks = [];
-    rec = new MediaRecorder(stream);
-    rec.ondataavailable = e => chunks.push(e.data);
-    rec.onstop = () => {
-      stream.getTracks().forEach(x => x.stop());
-      blob = new Blob(chunks, { type: rec.mimeType }); rec = null;
-      mic.classList.remove('recording');
+  function toggle() {
+    if (!allowed) return adultAction('Разрешить запись чтения в этом задании? Запись останется на устройстве.', () => { allowed = true; toggle(); });
+    toggleRecording(mic, 15000, audio => {
+      blob = audio;
       if (url) URL.revokeObjectURL(url);
       mine.src = url = URL.createObjectURL(blob);
       me.disabled = okBtn.disabled = false;
-      playMine(() => c.say(t.sample)); // сначала его голос, потом образец
-    };
-    mic.classList.add('recording');
-    rec.start();
-    c.later(() => rec?.state === 'recording' && rec.stop(), 15000);
+      playMine(() => { if (mic.isConnected && !document.hidden) c.say(t.sample); });
+    }, () => { okBtn.disabled = false; c.say(P.noMic); });
   }
   function finish() { if (blob) c.saveRead?.(blob, t.text); c.ok(); }
-  c.root.append(h('div', { class: 'bigtext' + (t.text.length > 8 ? ' long' : '') }, t.text), mic, row('opts', me, sample, okBtn));
+  c.root.append(h('div', { class: 'bigtext' + (t.text.length > 8 ? ' long' : '') }, t.text), mic, row('opts', me, sample, okBtn), B(c, 'edit-action', 'Прочитать без записи', () => c.ok()));
   return { reveal: () => {}, auto: () => c.ok() };
 }
 

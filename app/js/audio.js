@@ -146,7 +146,7 @@ const synth = () => (typeof speechSynthesis !== 'undefined' ? speechSynthesis : 
 const quality = v => (/enhanced|premium|улучш|высок|natural|neural|siri/i.test(v.name) ? 10 : 0) + (/google|yuri|юрий|katya|катя/i.test(v.name) ? 3 : 0) + (v.localService ? 1 : 0);
 export function russianVoices() {
   const s = synth();
-  return s ? s.getVoices().filter(v => /^ru/i.test(v.lang)).sort((a, b) => quality(b) - quality(a)) : [];
+  return s ? s.getVoices().filter(v => v.localService && /^ru/i.test(v.lang)).sort((a, b) => quality(b) - quality(a)) : [];
 }
 export const voiceIsBasic = () => { const v = russianVoices(); return v.length > 0 && quality(v[0]) < 3; };
 export const hasRecordedVoice = () => where.size > 0;
@@ -156,7 +156,8 @@ function speak(text, done) {
   if (!s) return done();
   const u = new SpeechSynthesisUtterance(clean(text));
   const vs = russianVoices();
-  u.voice = vs.find(v => v.voiceURI === cfg.voice) || vs[0] || null;
+  if (!vs.length) return done();
+  u.voice = vs.find(v => v.voiceURI === cfg.voice) || vs[0];
   u.lang = 'ru-RU';
   u.rate = cfg.rate || 0.9;
   u.volume = volVoice();
@@ -184,7 +185,7 @@ const within = (promise, ms) => Promise.race([promise, new Promise(f => setTimeo
 // Сказать текст вслух. Новая фраза перебивает старую.
 // Если нужные записи ещё загружаются (первый запуск, новый остров) — немного ждём их, а не говорим запасным голосом.
 export async function say(text) {
-  if (silent || !text) return;
+  if (silent || !text || globalThis.document?.hidden) return;
   hush();
   const my = ++turn;
   await within(listReady, 5000);

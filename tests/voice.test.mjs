@@ -51,3 +51,13 @@ test('для всех фраз приложения есть готовые за
   for (const text of allPhrases(manifest.names, ISLANDS.map(i => i.sticker), ISLANDS.map(i => i.title))) pieces(text).forEach(need);
   assert.ok(miss.length / all < 0.005, `без записи: ${miss.length} из ${all}, например: ${miss.slice(0, 5).join(' | ')}`);
 });
+
+
+test('в запасном русском голосе используются только локальные голоса устройства', async t => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'speechSynthesis');
+  const voices = [{ lang: 'ru-RU', name: 'Local', localService: true }, { lang: 'ru-RU', name: 'Network', localService: false }];
+  Object.defineProperty(globalThis, 'speechSynthesis', { configurable: true, value: { getVoices: () => voices } });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'speechSynthesis', previous); else delete globalThis.speechSynthesis; });
+  const { russianVoices } = await import('../app/js/audio.js');
+  assert.deepEqual(russianVoices(), [voices[0]]);
+});

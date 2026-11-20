@@ -1,3 +1,4 @@
+import { adultAction } from './adult.js';
 // ЛИНИЯ «ПИШУ РУЧКОЙ»: письменные буквы на бумаге.
 // Показ, как пишется буква → обводка пальцем → ребёнок пишет строчку в тетради → родитель фотографирует →
 // фото попадает в «Тетрадь» → родитель ставит оценку. Почерк проверяет взрослый, а не программа.
@@ -175,7 +176,7 @@ function penTask(ctx, task) {
     const input = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: async e => { const f = e.target.files[0]; if (f) finish(await shrink(f)); } });
     const text = P.penPhoto;
     frame('photo', bar(text), hero('happy', 'big bounce'),
-      h('button', { class: 'pen-big', onclick: () => input.click() }, h('span', {}, '📷'), ' Сфотографировать'), input,
+      h('button', { class: 'pen-big', onclick: () => adultAction('Открыть камеру для фотографии тетради?', () => input.click()) }, h('span', {}, '📷'), ' Сфотографировать'), input,
       h('button', { class: 'pbtn', onclick: () => finish(null) }, 'Без фото'));
     say(text);
   }
@@ -234,7 +235,7 @@ function viewer(ctx, id, w, url, back) {
   app.className = 'screen notebook';
   app.replaceChildren(h('div', { class: 'bar' }, h('button', { class: 'ibtn', 'aria-label': 'назад', onclick: back }, '↩️'), h('h1', {}, `${titleOf(id)} · ${fmt(w.d)}`)),
     h('img', { class: 'nb-full', src: url, alt: titleOf(id) }),
-    h('div', { class: 'prow' }, h('button', { class: 'pbtn on', onclick: share }, 'Переслать'), h('button', { class: 'pbtn', onclick: save }, 'Сохранить на устройство'),
+    h('div', { class: 'prow' }, h('button', { class: 'pbtn on', onclick: () => adultAction('Передать фотографию тетради через другое приложение?', share) }, 'Переслать'), h('button', { class: 'pbtn', onclick: save }, 'Сохранить на устройство'),
       h('button', { class: 'pbtn warn', onclick: async () => {
         if (!confirm('Удалить эту фотографию из тетради?')) return;
         await idb.del('photos', w.photo); w.photo = null; store.save(); back();

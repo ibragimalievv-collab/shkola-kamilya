@@ -22,7 +22,7 @@ function oneTask(x, t, { back, head = [], done }) {
   const { screen, ibtn, say, hero } = x;
   let m = 0, ended = false, mech = null;
   const root = h('div');
-  const end = (good, ms) => { ended = c.locked = true; setTimeout(() => done(good), ms); };
+  const end = (good, ms) => { ended = c.locked = true; setTimeout(() => { if (root.isConnected) done(good); }, ms); };
   const c = {
     root, rng: rng(), islandN: 0, locked: false, say, prompt: say, later: (fn, ms) => setTimeout(fn, ms), saveArt() {}, saveRead() {}, saveWord() {}, myPic: null,
     ok() { if (ended) return; sfx('ok'); end(true, 1200); },
@@ -92,7 +92,7 @@ function openLetter(x, i, back) {
   const finish = () => {
     if (!isNew) return back();
     m.n = i + 1; m.d = today(); store.save();
-    sfx('star'); say(P.mailEnd); setTimeout(back, 3800);
+    back(); sfx('star'); say(P.mailEnd);
   };
   screen('reader', h('div', { class: 'bar' }, ibtn('◀', 'к письмам', back), h('span', { class: 'grow' }), ibtn('🔊', 'прочитать письмо', () => say(whole), 'speak')),
     h('div', { class: 'page paper' }, h('div', { class: 'paper-top' }, hero('happy', 'mini'), h('span', { class: 'stamp' }, stamp)),
@@ -125,7 +125,7 @@ export function duoScreen(x, back) {
     for (let i = 0; i < 20; i++) { t = makeTask(any(pool), r); if (['pick', 'listen', 'keypad'].includes(t.m)) break; }
     let m = 0, ended = false, mech = null;
     const root = h('div'), panel = h('div', { class: 'opts judge' });
-    const next = ms => { turn++; setTimeout(step, ms); };
+    const next = ms => { turn++; setTimeout(() => { if (root.isConnected) step(); }, ms); };
     // Взрослый отвечает один раз; верно или нет — не показываем, пока ребёнок не скажет своё мнение.
     const judge = good => {
       ended = c.locked = true;

@@ -106,13 +106,20 @@ export function library(x, back) {
     })));
   say(P.library);
 }
-function reader(x, i, back) {
+export function firstBookCard(x, island, back) {
+  if (island.id !== 'r1' || !x.store.islandDone(island)) return null;
+  const title = BOOKS[0][1], read = x.store.profile.books?.[0];
+  return h('button', { class: 'map-next first-book', onclick: () => reader(x, 0, back, 'к острову') },
+    '📖 ' + (read ? 'Прочитать ещё раз' : 'Прочитай свою первую книжку'), h('small', {}, '«' + title + '»'));
+}
+
+function reader(x, i, back, backLabel = 'к книжкам') {
   const { store, screen, ibtn, say } = x;
   const [stage, title, pages] = BOOKS[i];
   const show = n => {
     const [pic, text] = pages[n], shown = stage <= 20 ? text.toUpperCase() : text;
     prepare([text, ...text.split(' ').map(w => tokW(bareWord(w)))]);
-    screen('reader', h('div', { class: 'bar' }, ibtn('📚', 'к книжкам', back), h('b', { class: 'grow book-title' }, title), ibtn('🔊', 'прочитать страницу', () => say(text), 'speak')),
+    screen('reader', h('div', { class: 'bar' }, ibtn(backLabel === 'к книжкам' ? '📚' : '◀', backLabel, back), h('b', { class: 'grow book-title' }, title), ibtn('🔊', 'прочитать страницу', () => say(text), 'speak')),
       h('div', { class: 'page' }, h('div', { class: 'bigpic' }, pic),
         h('div', { class: 'page-text' }, shown.split(' ').map((w, k) => { const bare = bareWord(text.split(' ')[k]); return bare ? h('button', { class: 'word', onclick: () => { sfx('tap'); say(tokW(bare)); } }, w) : h('span', {}, w); }))),
       h('div', { class: 'opts' }, n ? ibtn('◀', 'назад', () => show(n - 1)) : null, h('span', { class: 'score dark' }, `${n + 1} / ${pages.length}`),

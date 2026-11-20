@@ -1,3 +1,4 @@
+import { adultAction } from './adult.js';
 // РАСКРАСЬ ФОТО. Ребёнок фотографирует себя, маму, кота — или выбирает готовый снимок, — и приложение
 // превращает фотографию в карандашный рисунок на белом листе. Области заливаются одним касанием,
 // есть кисть, ластик и отмена; недокрашенное сохраняется.
@@ -495,8 +496,8 @@ export function photoScreen(x, back, note) {
   } });
   const shelf = h('div', { class: 'shelf' });
   screen('library', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.photoHello), 'speak')),
-    h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => { say(P.photoTip); cam.click(); }, 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => pick.click(), 'play'),
-      h('button', { type: 'button', class: 'reward-action', onclick: () => lineArt.click() }, 'Загрузить раскраску')), cam, pick, lineArt,
+    h('div', { class: 'opts' }, ibtn('📷', 'сфотографировать', () => adultAction('Открыть камеру для раскраски?', () => { say(P.photoTip); cam.click(); }), 'play'), ibtn('🖼️', 'выбрать готовую фотографию', () => adultAction('Выбрать фотографию на устройстве?', () => pick.click()), 'play'),
+      h('button', { type: 'button', class: 'reward-action', onclick: () => adultAction('Выбрать рисунок из файлов?', () => lineArt.click()) }, 'Загрузить раскраску')), cam, pick, lineArt,
     note === P.photoFail && h('p', { class: 'paint-feedback', role: 'status' }, 'Не удалось открыть картинку. Попробуй другой файл.'), shelf);
   list.filter(it => !rewardDraft(it)).forEach(async it => {
     const btn = h('button', { class: 'book page-thumb', 'aria-label': 'раскраска', onclick: () => { sfx('tap'); void resumeArtwork(x, it.id, again); } });
@@ -1045,7 +1046,7 @@ async function openPage(x, id, back, options = {}) {
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm', file = new File([blob], `risunok-${today()}.${ext}`, { type: blob.type });
       const close = () => { panel.remove(); view.remove(); busy = false; };
       const panel = h('div', { class: 'opts video-row' },
-        navigator.canShare?.({ files: [file] }) ? ibtn('📤', 'отправить видео', () => navigator.share({ files: [file] }).catch(() => {})) : null,
+        navigator.canShare?.({ files: [file] }) ? ibtn('📤', 'отправить видео', () => adultAction('Передать видео рисунка через другое приложение?', () => navigator.share({ files: [file] }).catch(() => {}))) : null,
         ibtn('💾', 'сохранить видео', () => { const a = h('a', { href: URL.createObjectURL(blob), download: file.name }); document.body.append(a); a.click(); a.remove(); }),
         ibtn('✔', 'закрыть видео', close, 'play'));
       stage.after(panel);

@@ -25,19 +25,37 @@ const where = new Map();          // отпечаток кусочка → [на
 const loaded = new Map();         // набор → звуковые данные
 const loading = new Map();
 
+// При первом открытии загрузка голоса начинается раньше, чем страницу берёт под управление
+// сервис-воркер. В этом случае сохраняем ответ здесь; далее записью занимается воркер.
+async function voiceFile(file, options) {
+  const url = 'audio/' + file;
+  const firstVisit = !globalThis.navigator?.serviceWorker?.controller;
+  const response = await fetch(url, options);
+  if (firstVisit && response.ok && typeof caches !== 'undefined') {
+    try {
+      const cache = await caches.open('shkola-audio');
+      await cache.put(url, response.clone());
+    } catch { /* при нехватке места запись всё равно воспроизводится из сети */ }
+  }
+  return response;
+}
+
 // Прочитать список наборов и загрузить общий набор (буквы, числа, слова, похвала).
 let listReady = Promise.resolve(); // станет «готово», когда прочитан список наборов
 export function initVoice() { return (listReady = initVoiceNow()); }
 async function initVoiceNow() {
   try {
-    manifest = await (await fetch('audio/manifest.json', { cache: 'no-cache' })).json();
+    manifest = await (await voiceFile('manifest.json', { cache: 'no-cache' })).json();
     for (const [name, pack] of Object.entries(manifest.packs)) for (const [id, off, len] of pack.items) where.set(id, [name, off, len]);
     loadPack('common');
     // Убираем из памяти устройства наборы прошлых версий озвучки.
     if (typeof caches !== 'undefined') {
       const keep = new Set(Object.values(manifest.packs).map(p => p.file));
       const cache = await caches.open('shkola-audio');
-      for (const req of await cache.keys()) if (!keep.has(req.url.split('/').pop())) cache.delete(req);
+      for (const req of await cache.keys()) {
+        const file = req.url.split('/').pop();
+        if (file.endsWith('.bin') && !keep.has(file)) await cache.delete(req);
+      }
     }
   } catch { /* записей нет — говорит встроенный голос */ }
 }
@@ -45,7 +63,7 @@ async function initVoiceNow() {
 export function loadPack(name) {
   const pack = manifest?.packs?.[name];
   if (!pack) return Promise.resolve();
-  if (!loading.has(name)) loading.set(name, fetch('audio/' + pack.file).then(r => { if (!r.ok) throw new Error(); return r.arrayBuffer(); }).then(buf => { loaded.set(name, buf); }).catch(() => { loading.delete(name); }));
+  if (!loading.has(name)) loading.set(name, voiceFile(pack.file).then(r => { if (!r.ok) throw new Error(); return r.arrayBuffer(); }).then(buf => { loaded.set(name, buf); }).catch(() => { loading.delete(name); }));
   return loading.get(name);
 }
 // Заранее загрузить все наборы, в которых лежат записи для этих фраз (одна и та же фраза хранится один раз — в наборе того острова, где встретилась впервые).

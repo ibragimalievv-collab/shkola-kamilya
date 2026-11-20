@@ -2,7 +2,7 @@
 // после этого всё берётся из сохранённой копии. Приложение ни к каким чужим адресам не обращается.
 
 // При любом изменении файлов приложения увеличьте номер версии — устройства скачают обновление.
-const VERSION = 'shkola-kamilya-31';
+const VERSION = 'shkola-kamilya-32';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
@@ -30,10 +30,17 @@ self.addEventListener('fetch', e => {
   if (here && !url.startsWith(here)) return; // чужой адрес (счётчик владельца) не трогаем и не сохраняем
   if (url.includes('/audio/')) {
     // Список наборов: сначала свежий из сети, без сети — сохранённый. Сами наборы: сохранённый, иначе скачиваем и сохраняем.
-    const keep = res => { if (res.ok) { const copy = res.clone(); caches.open(AUDIO).then(c => c.put(e.request, copy)); } return res; };
+    const keep = async res => {
+      if (res.ok) {
+        try { const cache = await caches.open(AUDIO); await cache.put(e.request, res.clone()); }
+        catch { /* при нехватке места отдаём уже полученную запись */ }
+      }
+      return res;
+    };
     e.respondWith(url.endsWith('manifest.json')
-      ? fetch(e.request).then(keep).catch(() => caches.match(e.request))
-      : caches.match(e.request).then(hit => hit || fetch(e.request).then(keep)));
+      ? fetch(e.request).then(res => res.ok ? keep(res) : Promise.reject()).catch(async () =>
+          (await caches.match(e.request, { cacheName: AUDIO })) || new Response(null, { status: 503 }))
+      : caches.match(e.request, { cacheName: AUDIO }).then(hit => hit || fetch(e.request).then(keep)));
     return;
   }
   // Сначала ищем в сохранённой копии; в сеть идём, только если файла там нет.

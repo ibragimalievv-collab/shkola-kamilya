@@ -32,7 +32,11 @@ export function createStore(storage, now = () => today()) {
   try { state = JSON.parse(storage.getItem(KEY)) || fresh(); } catch { state = fresh(); }
   if (!state.profiles || !state.profiles[state.current]) state = fresh();
 
-  const save = () => { try { storage.setItem(KEY, JSON.stringify(state)); } catch { /* память переполнена — играем дальше */ } };
+  let saveFailed = false;
+  const save = () => {
+    try { storage.setItem(KEY, JSON.stringify(state)); saveFailed = false; }
+    catch { saveFailed = true; }
+  };
   const p = () => state.profiles[state.current];
   const day = () => (p().days[now()] ||= { sec: 0, levels: 0 });
   const done = id => !!p().levels[id];
@@ -40,6 +44,7 @@ export function createStore(storage, now = () => today()) {
   const api = {
     get state() { return state; },
     get settings() { return state.settings; },
+    get saveFailed() { return saveFailed; },
     get profile() { return p(); },
     save,
     // Раздел профиля, которого могло не быть в старом сохранении: store.part('home', {})
@@ -166,8 +171,14 @@ export function createStore(storage, now = () => today()) {
     importText(text) {
       const s = JSON.parse(text);
       if (!s || s.v !== 1 || !s.profiles || !s.profiles[s.current] || !s.settings) throw new Error('Это не файл «Школы Камиля»');
+      const dict = value => value && typeof value === 'object' && !Array.isArray(value);
+      if (!dict(s.settings) || !dict(s.profiles) || !Object.hasOwn(s.profiles, s.current) ||
+          !Object.values(s.profiles).every(profile => dict(profile) && typeof profile.name === 'string' &&
+            ['levels', 'days', 'overrides', 'hero'].every(key => dict(profile[key])) &&
+            Array.isArray(profile.weak) && Array.isArray(profile.gallery))) throw new Error('Повреждён файл прогресса.');
+      storage.setItem(KEY, JSON.stringify(s));
       state = s;
-      save();
+      saveFailed = false;
     },
   };
   return api;

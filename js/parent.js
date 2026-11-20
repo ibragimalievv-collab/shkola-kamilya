@@ -3,13 +3,14 @@
 import { h, today, pl } from './util.js';
 import { ISLANDS, LEVELS } from './curriculum.js';
 import { LINES, lineOf, labelOf } from './tasks.js';
-import { say, hush, sfx, russianVoices, voicedNames } from './audio.js';
+import { say, hush, sfx, russianVoices, voicedNames, loadClips, setVoiceConfig } from './audio.js';
 import { P } from './phrases.js';
 import { penParent } from './pen.js';
 import { voiceStudio, clipCell } from './voice.js';
 import { albumCard } from './album.js';
 import { tokName } from './phrases.js';
 import { parentExtras } from './parent2.js';
+import { exportProfileFile, readProfileFile, restoreProfileFile, MAX_TRANSFER } from './transfer.js';
 import { profileTransferControls } from './transfer-screen.js';
 
 const btn = (text, fn, cls = '') => h('button', { class: 'pbtn ' + cls, onclick: fn }, text);
@@ -97,18 +98,56 @@ function parentScreen(ctx) {
   })));
 
   // --- данные ---
+  const note = h('p', { class: 'hint', role: 'status' });
+  function download(json, filename) {
+    const blob = new Blob([json], { type: 'application/json' });
+    if (blob.size > MAX_TRANSFER) throw new Error('Файл больше 128 МБ. Освободите место в альбоме или сохраните только прогресс.');
+    const url = URL.createObjectURL(blob);
+    const a = h('a', { href: url, download: filename });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+  const saveProfile = btn('Сохранить профиль с медиа', async () => {
+    if (saveProfile.disabled) return;
+    saveProfile.disabled = true;
+    note.textContent = 'Собираю профиль и сохранённые на устройстве медиафайлы…';
+    try {
+      download(await exportProfileFile(store), `shkola-profile-${today()}.json`);
+      note.textContent = 'Файл подготовлен. Сохраните его у себя: он может содержать детские фотографии и голос.';
+    } catch (err) { note.textContent = 'Не удалось сохранить копию. ' + err.message; }
+    finally { saveProfile.disabled = false; }
+  });
   const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: async e => {
-    try { store.importText(await e.target.files[0].text()); alert('Прогресс загружен.'); again(); } catch (err) { alert('Не получилось: ' + err.message); }
+    const input = e.currentTarget, selected = input.files[0]; input.value = '';
+    if (!selected || restore.disabled) return;
+    restore.disabled = true;
+    try {
+      if (selected.size > MAX_TRANSFER) throw new Error('Файл больше 128 МБ.');
+      const text = await selected.text();
+      if (JSON.parse(text)?.format === 'shkola-kamilya-profile') {
+        const data = readProfileFile(text);
+        const existing = store.profileForLink(data.profile.linkId);
+        if (existing && !confirm('Обновить этот профиль? Лучшие звёзды сохранятся, рисунки и записи профиля будут взяты из файла.')) return;
+        await restoreProfileFile(store, data);
+        await loadClips();
+      } else {
+        if (!confirm('Заменить прогресс и настройки всех профилей на этом устройстве данными из файла?')) return;
+        store.importText(text);
+      }
+      setVoiceConfig(store.settings);
+      again(); alert('Копия восстановлена.');
+    } catch (err) { note.textContent = 'Не удалось восстановить копию. ' + err.message; }
+    finally { restore.disabled = false; }
   } });
-  const data = card('Прогресс: сохранить и перенести',
-    h('div', { class: 'prow' },
-      btn('Сохранить в файл', () => {
-        const a = h('a', { href: URL.createObjectURL(new Blob([store.exportText()], { type: 'application/json' })), download: `shkola-kamilya-${today()}.json` });
-        document.body.append(a); a.click(); a.remove();
-      }),
-      btn('Загрузить из файла', () => file.click()), file,
-      btn('Сбросить прогресс', () => { if (confirm(`Стереть весь прогресс профиля «${p.name}»? Это нельзя отменить.`)) { store.resetProfile(); again(); } }, 'warn')),
-    h('p', { class: 'hint' }, 'Прогресс хранится только на этом устройстве. Файл пригодится, чтобы перенести его на другой планшет или сохранить на всякий случай.'));
+  const restore = btn('Загрузить из файла', () => file.click());
+  const data = card('Резервная копия',
+    store.saveFailed ? h('p', { role: 'alert' }, 'Устройству не удалось записать изменения. Сохраните резервную копию перед выходом.') : null,
+    h('div', { class: 'prow' }, saveProfile, btn('Сохранить только прогресс', () => {
+      try { download(store.exportText(), `shkola-kamilya-${today()}.json`); }
+      catch (err) { note.textContent = err.message; }
+    }), restore, file,
+    btn('Сбросить прогресс', () => { if (confirm(`Стереть весь прогресс профиля «${p.name}»? Это нельзя отменить.`)) { store.resetProfile(); again(); } }, 'warn')),
+    h('p', { class: 'hint' }, 'Копия с медиа сохраняет выбранный профиль: его прогресс, альбом, фотографии тетради, записи чтения, имени и семейных слов. Файл только с прогрессом сохраняет настройки и прогресс всех профилей. Оба формата открываются кнопкой «Загрузить из файла».'), note);
 
   hush();
   app.className = 'screen parent';

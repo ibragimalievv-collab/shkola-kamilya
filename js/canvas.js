@@ -2,6 +2,7 @@
 // Один и тот же холст служит для свободных рисунков, для обводки букв по пунктиру и для письма.
 
 import { h } from './util.js';
+import { colorButton } from './art.js';
 
 const COLORS = ['#2b2d42', '#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93', '#f15bb5'];
 const FONT = '700 {S}px "Arial Rounded MT Bold", "Trebuchet MS", "Segoe UI", system-ui, sans-serif';
@@ -90,12 +91,7 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
   // Панель: крупные кнопки цветов, толщина кисти, ластик-«стереть всё».
   const tools = h('div', { class: 'board-tools' });
   if (colors) {
-    COLORS.forEach((c, i) => {
-      const b = h('button', { class: 'color' + (i ? '' : ' sel'), style: `background:${c}`, 'aria-label': 'цвет', onclick: () => {
-        color = c; tools.querySelectorAll('.color').forEach(x => x.classList.toggle('sel', x === b));
-      } });
-      tools.append(b);
-    });
+    for (const c of COLORS) tools.append(colorButton(c, c === color, selected => { color = selected; }));
     [[10, 's'], [16, 'm'], [28, 'l']].forEach(([sz, k]) => {
       const b = h('button', { class: `size size-${k}` + (sz === brush ? ' sel' : ''), 'aria-label': 'толщина кисти', onclick: () => {
         size = sz; tools.querySelectorAll('.size').forEach(x => x.classList.toggle('sel', x === b));

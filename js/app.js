@@ -4,7 +4,7 @@
 import { h, makeRng, today, twice } from './util.js';
 import { idb } from './db.js';
 import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
-import { GIFT_COLORS, STORIES } from './stories.js';
+import { STORIES } from './stories.js';
 import { photoScreen, openArtwork, openLocalArtwork, resumeArtwork, LINE_ART_TYPES } from './photo.js';
 import { ARTWORK, artForIsland } from './artwork.js';
 import { readInvitation } from './pair.js';
@@ -20,7 +20,7 @@ import { buildSession, makeTask, adjust, tokW } from './tasks.js';
 import { createStore } from './store.js';
 import { say, hush, sfx, setVoiceConfig, setSilent, loadClips, initVoice, loadPack, prepare, voicedNames, unlockAudio } from './audio.js';
 import { P, PRAISE, PRAISE_NAME, HINTS, REVEAL, tokName } from './phrases.js';
-import { heroSVG, HERO_PARTS, PALETTE, animalSVG, islandSVG, starSVG, LINE_COLOR } from './art.js';
+import { heroSVG, HERO_PARTS, PALETTE, colorButton, animalSVG, islandSVG, starSVG, LINE_COLOR } from './art.js';
 import { renderTask } from './mechanics.js';
 import { openParent } from './parent.js';
 import { penScreen, penCount, sampleSVG } from './pen.js';
@@ -87,6 +87,14 @@ function welcome() {
     h('h1', { class: 'logo' }, 'Школа ', h('span', {}, store.profile.name === 'Камиль' ? 'Камиля' : '· ' + store.profile.name)),
     hero('happy', 'big bounce'),
     ibtn('▶', 'начать', start, 'play huge'),
+    !store.profile.heroDone && !store.profile.placed && !Object.keys(store.profile.levels).length
+      ? h('button', { class: 'name-btn', onclick: () => {
+        store.profile.heroDone = true;
+        store.profile.petSkipped = true;
+        store.profile.placed = true;
+        store.save();
+        playLevel(LEVELS[0]);
+      } }, 'Сразу к первому уроку') : null,
     // Кнопка для взрослого: вписать имя своего ребёнка (то же самое есть в разделе «Для родителей»).
     h('button', { class: 'name-btn', onclick: () => {
       const n = prompt('Как зовут ребёнка? Это имя будет на заставке и в разделе для родителей.', store.profile.name);
@@ -97,7 +105,6 @@ function welcome() {
 // ---------- раскрась своего помощника ----------
 function paintHero(back) {
   let color = PALETTE[0];
-  void GIFT_COLORS;
   const box = hero('happy', 'big');
   const redraw = () => { box.innerHTML = heroSVG(store.profile.hero, 'happy'); };
   box.addEventListener('click', e => {
@@ -108,11 +115,12 @@ function paintHero(back) {
     redraw();
   });
   const colors = [...PALETTE, ...store.part('gifts', { colors: [], badges: [], last: 0 }).colors]; // плюс краски-сюрпризы
-  const pal = h('div', { class: 'palette' }, colors.map((c, i) => h('button', { class: 'color' + (i ? '' : ' sel'), style: `background:${c}`, 'aria-label': 'цвет', onclick: e => {
-    color = c; sfx('tap'); pal.querySelectorAll('.color').forEach(x => x.classList.toggle('sel', x === e.currentTarget));
-  } })));
+  const pal = h('div', { class: 'palette' }, colors.map(c => colorButton(c, c === color, selected => {
+    color = selected;
+    sfx('tap');
+  })));
   const text = P.paint;
-  screen('paint', h('div', { class: 'bar' }, ibtn('🔊', 'послушать ещё раз', () => say(text))), box, pal,
+  screen('hero-paint', h('div', { class: 'bar' }, ibtn('🔊', 'послушать ещё раз', () => say(text))), box, pal,
     ibtn('▶', 'готово', () => { store.profile.heroDone = true; store.save(); (back || map)(); }, 'play'));
   say(text);
 }

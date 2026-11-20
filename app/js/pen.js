@@ -128,7 +128,7 @@ function penTask(ctx, task) {
     const b = makeBoard({ brush: 12, colors: false, onStroke: p => {
       if (!cov || done) return;
       cov.add(p);
-      if (cov.complete) { done = true; sfx('ok'); setTimeout(paper, 900); }
+      if (cov.complete) { done = true; sfx('ok'); setTimeout(() => { if (b.el.isConnected) paper(); }, 900); }
     } });
     const k = Math.min((b.W - 30) / (s.x1 - s.x0), (b.H - 20) / (BOTTOM - TOP)), ox = (b.W - (s.x1 - s.x0) * k) / 2 - s.x0 * k, oy = (b.H - (BOTTOM - TOP) * k) / 2 - TOP * k;
     const g = b.guide.getContext('2d');

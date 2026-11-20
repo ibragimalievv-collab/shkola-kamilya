@@ -597,3 +597,25 @@ svg { display: block; width: 100%; height: 100%; }
 .album-month figure { cursor: pointer; }
 .album-view { position: fixed; inset: 0; background: #000c; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; font: 16px system-ui, sans-serif; }
 .album-view img { max-width: 100%; max-height: 80dvh; border-radius: 12px; background: #fff; }
+
+.edit-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .45rem; width: 100%; flex: none; }
+.edit-action, .map-next { min-height: 44px; border-radius: .85rem; padding: .45rem .8rem; color: #26384f; background: #fff; border: 2px solid #bdcfdf; font-size: clamp(15px, 2.7vmin, 20px); font-weight: 750; }
+.edit-action[aria-pressed="true"] { background: #ceebff; border-color: #247ab0; }
+.edit-action.edit-done, .map-next { color: #fff; background: #23753f; border-color: #195d31; }
+.edit-hint, .map-note { margin: 0; text-align: center; font-size: clamp(15px, 2.6vmin, 19px); }
+.edit-hint:empty, .map-note:empty { display: none; }
+#app.pet-draw .board { flex: none; }
+#app.pet-draw .board-stage { flex: none; width: min(100%, 55dvh * var(--ar)); max-height: none; }
+#app.pet-name { justify-content: space-evenly; }
+.map-next { display: grid; width: min(100%, 30rem); margin: .25rem auto; }
+.map-next small, .lesson-result small { display: block; font-weight: 500; }
+.sea.compact .island.locked { display: none; }
+.map .sea { padding-bottom: .5rem; }
+.lesson-result { text-align: center; max-width: 34rem; }
+#app.reward { overflow-y: auto; }
+@media (max-height: 480px) and (orientation: landscape) {
+  #app.pet-draw .board { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(170px, .7fr); align-items: center; }
+  #app.pet-draw .board .edit-actions { grid-column: 1 / -1; }
+  #app.pet-draw .board-stage { justify-self: center; width: min(100%, 58dvh * var(--ar)); }
+  #app.hero-paint .hero-box.big { width: 30vmin; height: 30vmin; }
+}

@@ -163,3 +163,16 @@ test('неудачное восстановление не заменяет те
   assert.throws(() => store.importText(JSON.stringify(broken)), /Повреждён/);
   assert.equal(store.stars(LEVELS[0].id), 3);
 });
+
+test('отмена стартовой оценки сохраняет пройденный ребёнком урок и его результат', () => {
+  const storage = fakeStorage();
+  const store = createStore(storage, () => '2026-11-20');
+  const [first, second] = LEVELS;
+  store.skipLevels([first.id, second.id]);
+  store.finishLevel(first, 3, { firstTry: 5, total: 7 });
+  store.unskipAll();
+  const restored = createStore(storage);
+  assert.equal(restored.stars(first.id), 3);
+  assert.equal(restored.stars(second.id), 0);
+  assert.deepEqual(restored.profile.lastLesson, { id: first.id, date: '2026-11-20', firstTry: 5, total: 7 });
+});

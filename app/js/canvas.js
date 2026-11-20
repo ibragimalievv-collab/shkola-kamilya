@@ -13,13 +13,29 @@ export function boardSize() {
 }
 
 // Создать холст. onStroke вызывается после каждого движения пальца.
-export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
+export function makeBoard({ colors = true, brush = 16, onStroke, editing = false } = {}) {
   const [W, H] = boardSize();
   const guide = h('canvas', { width: W, height: H, class: 'layer' });  // нижний слой: пунктир, линейки
   const ink = h('canvas', { width: W, height: H, class: 'layer ink' }); // верхний слой: то, что рисует ребёнок
   const g = ink.getContext('2d');
   const strokes = []; // все линии ребёнка: [{color, size, pts:[[x,y],…]}]
   let color = COLORS[0], size = brush, cur = null;
+
+  const history = [];
+  let erasing = false, pointer = null;
+  const undoButton = h('button', { class: 'edit-action', disabled: true, onclick: () => {
+    const last = history.pop();
+    if (last.add) strokes.splice(strokes.indexOf(last.add), 1);
+    else if (last.removed) strokes.splice(last.index, 0, last.removed);
+    else strokes.push(...last.cleared);
+    undoButton.disabled = !history.length;
+    redraw();
+  } }, '↶ Отменить');
+  const remember = change => { if (editing) { history.push(change); undoButton.disabled = false; } };
+  const eraseButton = h('button', { class: 'edit-action', 'aria-pressed': 'false', onclick: () => {
+    erasing = !erasing;
+    eraseButton.setAttribute('aria-pressed', String(erasing));
+  } }, 'Стереть линию');
 
   const pos = e => {
     const r = ink.getBoundingClientRect();
@@ -35,14 +51,26 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
   }
   ink.addEventListener('pointerdown', e => {
     e.preventDefault();
+    if (pointer !== null) return;
+    if (erasing) {
+      const [x, y] = pos(e);
+      const index = strokes.findLastIndex(s => s.pts.some(([a, b], i) => {
+        const [u, v] = s.pts[Math.max(0, i - 1)], dx = a - u, dy = b - v;
+        const t = Math.max(0, Math.min(1, ((x - u) * dx + (y - v) * dy) / (dx * dx + dy * dy || 1)));
+        return Math.hypot(x - u - t * dx, y - v - t * dy) <= s.size / 2 + 10;
+      }));
+      if (index >= 0) { remember({ removed: strokes[index], index }); strokes.splice(index, 1); redraw(); }
+      return;
+    }
+    pointer = e.pointerId;
     try { ink.setPointerCapture(e.pointerId); } catch { /* не страшно */ }
     cur = { color, size, pts: [pos(e)] };
-    strokes.push(cur);
+    strokes.push(cur); remember({ add: cur });
     seg(cur, cur.pts[0], cur.pts[0]);
     onStroke?.(cur.pts[0]);
   });
   ink.addEventListener('pointermove', e => {
-    if (!cur) return;
+    if (!cur || e.pointerId !== pointer) return;
     e.preventDefault();
     const p = pos(e), last = cur.pts[cur.pts.length - 1];
     if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 3) return;
@@ -50,7 +78,7 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
     seg(cur, last, p);
     onStroke?.(p);
   });
-  const up = () => { if (cur) { cur = null; api.onUp?.(); } };
+  const up = e => { if (cur && e.pointerId === pointer) { pointer = null; cur = null; api.onUp?.(); } };
   ink.addEventListener('pointerup', up);
   ink.addEventListener('pointercancel', up);
 
@@ -63,7 +91,7 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
       for (const s of strokes) { n += 4; for (let i = 1; i < s.pts.length; i++) n += Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]); }
       return n;
     },
-    clear() { strokes.length = 0; redraw(); api.onClear?.(); },
+    clear() { if (strokes.length && editing) remember({ cleared: [...strokes] }); strokes.length = 0; redraw(); api.onClear?.(); },
     // Добавить линию программно (нужно для показа ответа и самопроверки).
     addStroke(pts, col = '#2a9d8f') { const s = { color: col, size, pts }; strokes.push(s); redraw(); pts.forEach(p => onStroke?.(p)); },
     // Рисунок без фона, обрезанный по краям — чтобы нарисованный герой мог жить на карте и в задачах.
@@ -91,7 +119,7 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
   // Панель: крупные кнопки цветов, толщина кисти, ластик-«стереть всё».
   const tools = h('div', { class: 'board-tools' });
   if (colors) {
-    for (const c of COLORS) tools.append(colorButton(c, c === color, selected => { color = selected; }));
+    for (const c of COLORS) tools.append(colorButton(c, c === color, selected => { color = selected; erasing = false; eraseButton.setAttribute('aria-pressed', 'false'); }));
     [[10, 's'], [16, 'm'], [28, 'l']].forEach(([sz, k]) => {
       const b = h('button', { class: `size size-${k}` + (sz === brush ? ' sel' : ''), 'aria-label': 'толщина кисти', onclick: () => {
         size = sz; tools.querySelectorAll('.size').forEach(x => x.classList.toggle('sel', x === b));
@@ -99,8 +127,9 @@ export function makeBoard({ colors = true, brush = 16, onStroke } = {}) {
       tools.append(b);
     });
   }
-  tools.append(h('button', { class: 'tool-btn', 'aria-label': 'стереть всё', onclick: () => api.clear() }, '🧽'));
-  api.el = h('div', { class: 'board' }, api.stage, tools);
+  const clear = h('button', { class: editing ? 'edit-action' : 'tool-btn', 'aria-label': 'стереть всё', onclick: () => api.clear() }, editing ? 'Стереть всё' : '🧽');
+  if (!editing) tools.append(clear);
+  api.el = h('div', { class: 'board' }, editing ? h('div', { class: 'edit-actions' }, undoButton, eraseButton, clear) : null, api.stage, tools);
   return api;
 }
 

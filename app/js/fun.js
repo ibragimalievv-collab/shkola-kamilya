@@ -23,28 +23,35 @@ const sayName = n => (picOf(n) ? tokW(n) : n);
 export const petImg = (store, cls = 'pet') => (store.profile.pet?.img ? h('img', { class: cls, src: store.profile.pet.img, alt: store.profile.pet.name || 'мой герой' }) : null);
 
 // ---------- свой герой: нарисовать и назвать ----------
-export function drawPet(x, done) {
+export function drawPet(x, done, back) {
   const { store, screen, ibtn, say } = x;
-  const b = makeBoard({ brush: 16 });
+  const b = makeBoard({ brush: 16, editing: true });
+  const feedback = h('p', { class: 'edit-hint', role: 'status' });
   const next = () => {
-    if (b.ink() < 150) return say(P.needDraw2);
+    if (b.ink() < 150) { feedback.textContent = P.needDraw2; say(P.needDraw2); return; }
     const img = b.cutout(220);
     let name = PET_NAMES[0];
     const btns = PET_NAMES.map(n => h('button', { class: 'opt', onclick: e => { name = n; sfx('tap'); say(n); btns.forEach(q => q.classList.toggle('right', q === e.currentTarget)); } }, h('span', { class: 'txt longish' }, n)));
     btns[0].classList.add('right');
-    screen('paint', h('div', { class: 'bar' }, ibtn('🔊', 'послушать ещё раз', () => say(P.petName))), h('img', { class: 'pet big', src: img, alt: 'мой герой' }), h('div', { class: 'opts' }, btns),
-      ibtn('▶', 'готово', () => { store.profile.pet = { img, name }; store.save(); say(P.petHello(name)); setTimeout(done, 3800); }, 'play'));
+    screen('pet-name', h('div', { class: 'bar' }, h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: draw }, '‹ К рисунку'), h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.petName))), h('img', { class: 'pet big', src: img, alt: 'мой герой' }), h('div', { class: 'opts' }, btns),
+      ibtn('▶', 'готово', () => { store.profile.pet = { img, name }; store.save(); done(); }, 'play'));
     say(P.petName);
   };
-  screen('level', h('div', { class: 'bar' }, ibtn('🗺️', 'потом', done, 'small'), h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.petDraw), 'speak')),
-    h('div', { class: 'task' }, h('div', { class: 'copy-top' }, h('div', { class: 'sample' }, '🎨'), h('button', { class: 'check', onclick: next }, '✔')), b.el));
-  say(P.petDraw);
+  function draw() {
+    screen('pet-draw', h('div', { class: 'edit-actions' },
+      h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: () => back(draw) }, '‹ Назад'),
+      h('button', { class: 'edit-action', 'aria-label': 'потом', onclick: done }, 'Потом'),
+      h('button', { class: 'edit-action edit-done', onclick: next }, 'Готово ✓'),
+      ibtn('🔊', 'послушать ещё раз', () => say(P.petDraw), 'small')), b.el, feedback);
+    say(P.petDraw);
+  }
+  draw();
 }
 
 // ---------- свободное рисование ----------
 export function freeDraw(x, back) {
   const { store, screen, ibtn, say } = x;
-  const b = makeBoard({ brush: 16 });
+  const b = makeBoard({ brush: 16, editing: true });
   screen('level', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.freeDraw), 'speak')),
     h('div', { class: 'task' }, h('div', { class: 'copy-top' }, h('div', { class: 'sample' }, '🎨'), h('button', { class: 'check', onclick: () => { if (b.ink() > 150) keepArt(store, b.dataUrl()); sfx('star'); back(); } }, '✔')), b.el));
   say(P.freeDraw);
@@ -109,7 +116,7 @@ function reader(x, i, back) {
       h('div', { class: 'page' }, h('div', { class: 'bigpic' }, pic),
         h('div', { class: 'page-text' }, shown.split(' ').map((w, k) => { const bare = bareWord(text.split(' ')[k]); return bare ? h('button', { class: 'word', onclick: () => { sfx('tap'); say(tokW(bare)); } }, w) : h('span', {}, w); }))),
       h('div', { class: 'opts' }, n ? ibtn('◀', 'назад', () => show(n - 1)) : null, h('span', { class: 'score dark' }, `${n + 1} / ${pages.length}`),
-        n < pages.length - 1 ? ibtn('▶', 'дальше', () => show(n + 1), 'play') : ibtn('✔', 'конец', () => { store.part('books', {})[i] = 1; store.save(); sfx('star'); say(P.bookEnd); setTimeout(back, 3500); }, 'play')));
+        n < pages.length - 1 ? ibtn('▶', 'дальше', () => show(n + 1), 'play') : ibtn('✔', 'конец', () => { store.part('books', {})[i] = 1; store.save(); back(); sfx('star'); say(P.bookEnd); }, 'play')));
   };
   show(0);
 }

@@ -7,7 +7,7 @@ import { h, today, twice, makeRng, shuffle } from './util.js';
 import { idb } from './db.js';
 import { P } from './phrases.js';
 import { sfx } from './audio.js';
-import { animalSVG, heroSVG } from './art.js';
+import { animalSVG, heroSVG, colorButton } from './art.js';
 import { ISLANDS } from './curriculum.js';
 import { ORDER } from './data.js';
 import { tokL, example } from './tasks.js';
@@ -868,7 +868,14 @@ async function openPage(x, id, back, options = {}) {
   // --- панели кнопок ---
   const pickOne = (box, cls, el) => box.querySelectorAll('.' + cls).forEach(q => q.classList.toggle('sel', q === el));
   const colors = h('div', { class: 'board-tools' }), gamePal = h('div', { class: 'board-tools paint-palette' }), tools = h('div', { class: 'board-tools' });
-  COLORS.forEach((c, i) => { const b = h('button', { class: 'color' + (i ? '' : ' sel') + (c === '#ffffff' ? ' white' : c === 'rainbow' ? ' rainbow' : ''), style: c === 'rainbow' ? '' : `background:${c}`, 'aria-label': 'цвет', onclick: () => { color = c; pickOne(colors, 'color', b); if (tool === 'erase' || tool === 'magic' || tool === 'stamp') setTool('fill'); } }); colors.append(b); });
+  for (const c of COLORS) {
+    const button = colorButton(c, c === color, selected => {
+      color = selected;
+      if (tool === 'erase' || tool === 'magic' || tool === 'stamp') setTool('fill');
+    });
+    if (c === '#ffffff') button.classList.add('white');
+    colors.append(button);
+  }
   function drawPalette() { // цвета с подписями: буква или число
     gamePal.replaceChildren(...palette.map((c, i) => {
       const label = String(keys[i]);

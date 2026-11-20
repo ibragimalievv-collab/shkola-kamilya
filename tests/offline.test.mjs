@@ -53,13 +53,17 @@ test('после первого открытия приложение работ
     Promise,
     Request: class { constructor(url) { this.url = url; } },
   };
-  stores.set('старая-версия', new Map([['index.html', { body: 'старое' }]]));
+  stores.set('другое-приложение', new Map());
+  stores.set('shkola-audio', new Map());
+  stores.set('shkola-kamilya-1', new Map([['index.html', { body: 'старое' }]]));
   vm.runInNewContext(swText, sandbox);
   const fire = async (type, ev = {}) => { let p; listeners[type]({ ...ev, waitUntil: x => { p = x; }, respondWith: x => { p = x; } }); return p; };
 
   await fire('install');
   await fire('activate');
-  assert.equal(stores.size, 1, 'старая сохранённая копия удалена');
+  assert.equal(stores.has('shkola-kamilya-1'), false);
+  assert.ok(stores.has('другое-приложение'), 'кэш соседнего сайта сохранён');
+  assert.ok(stores.has('shkola-audio'), 'озвучка сохранена');
 
   online = false; // интернет пропал
   for (const f of ['', 'index.html?selftest', ...onDisk]) {

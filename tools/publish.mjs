@@ -3,7 +3,7 @@
 // слово в задании не из справочника) — публикация останавливается и ничего на сайт не уходит.
 import { execSync } from 'node:child_process';
 const run = (cmd, quiet) => execSync(cmd, { stdio: quiet ? 'pipe' : 'inherit', cwd: new URL('..', import.meta.url) });
-try { run('node --test tests/', true); }
+try { run('npm test', true); }
 catch (e) { console.error(String(e.stdout || '').split('\n').filter(l => /✖|AssertionError/.test(l)).slice(0, 20).join('\n')); console.error('\nПроверки не пройдены — публикация остановлена.'); process.exit(1); }
 console.log('Все проверки пройдены. Публикую…');
 run('git push -q origin main');

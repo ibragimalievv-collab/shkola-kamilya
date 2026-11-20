@@ -171,8 +171,9 @@ export function placement(x, done) {
     { line: 'M', isl: 'm2', tasks: [['listenN', 6, 10], ['compare', 1, 10], ['house', 6, 9]] },
     { line: 'M', isl: 'm3', tasks: [['exKey', 'a10'], ['exKey', 's10'], ['exPick', 'am10']] });
   const passed = [], failedLine = {};
-  let gi = 0, ti = 0;
+  let gi = 0, ti = 0, nextStep;
   const finish = () => {
+    clearTimeout(nextStep);
     store.skipLevels(passed.flatMap(id => ISLANDS.find(i => i.id === id).levels.map(l => l.id)));
     store.profile.placed = true; store.save();
     screen('rest', hero('happy', 'big bounce'), h('div', { class: 'stars huge', html: passed.length ? passed.map(() => starSVG(true)).join('') : '' }), ibtn('▶', 'дальше', done, 'play'));
@@ -189,7 +190,7 @@ export function placement(x, done) {
       if (over) return; over = c.locked = true;
       if (ok) { sfx('ok'); if (++ti >= g.tasks.length) { passed.push(g.isl); gi++; ti = 0; } }
       else { failedLine[g.line] = true; ti = 0; say(P.testNext); } // ошибся — эту линию дальше не проверяем, без подсказок и без огорчения
-      setTimeout(step, ok ? 700 : 1800);
+      nextStep = setTimeout(step, ok ? 700 : 1800);
     };
     const c = { root, rng: r, islandN: 0, locked: false, say, prompt: say, later: (fn, ms) => setTimeout(fn, ms), saveArt() {}, ok: () => go(true), miss: () => go(false) };
     screen('level', h('div', { class: 'bar' }, ibtn('🗺️', 'закончить', finish, 'small'), hero('ok', 'mini'), h('div', { class: 'progress' }, h('i', { style: `width:${(gi / groups.length) * 100}%` })), ibtn('🔊', 'послушать задание', () => say(t.say), 'speak')), root);

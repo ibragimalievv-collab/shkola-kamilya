@@ -1,3 +1,5 @@
+import { h } from './util.js';
+
 // РИСУНКИ: помощник Лумик, звери-наклейки, острова. Всё нарисовано своими простыми фигурами (вектор).
 
 // ---------- Лумик, помощник ребёнка ----------
@@ -21,6 +23,33 @@ export function heroSVG(c, mood = 'ok') {
 }
 export const HERO_PARTS = ['body', 'belly', 'ears', 'feet', 'star'];
 export const PALETTE = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#52b788', '#5bc0eb', '#1982c4', '#6a4c93', '#f15bb5', '#b08968', '#ffffff', '#495057'];
+
+const COLOR_NAMES = {
+  '#ff595e': 'Красный', '#ff924c': 'Оранжевый', '#ffca3a': 'Жёлтый', '#8ac926': 'Салатовый',
+  '#52b788': 'Зелёный', '#5bc0eb': 'Голубой', '#1982c4': 'Синий', '#6a4c93': 'Фиолетовый',
+  '#f15bb5': 'Розовый', '#b08968': 'Коричневый', '#ffffff': 'Белый', '#495057': 'Тёмно-серый',
+  '#2b2d42': 'Чернильный', '#2a9d8f': 'Бирюзовый', '#8ecae6': 'Светло-голубой', '#ffb3c6': 'Светло-розовый',
+  '#f6c9a0': 'Персиковый', '#c68642': 'Охра', '#7b4a23': 'Шоколадный', '#adb5bd': 'Серый', rainbow: 'Радуга',
+  '#00c2a8': 'Ярко-бирюзовый', '#ff8fab': 'Нежно-розовый', '#a0e426': 'Лаймовый', '#845ef7': 'Сиреневый',
+  '#ffd166': 'Золотистый', '#06d6a0': 'Мятный', '#ef476f': 'Малиновый', '#8d5524': 'Каштановый',
+};
+
+export function colorButton(value, selected, onSelect) {
+  const label = COLOR_NAMES[value] || `Цвет ${value}`;
+  const button = h('button', {
+    type: 'button', class: 'color' + (selected ? ' sel' : '') + (value === 'rainbow' ? ' rainbow' : ''),
+    style: value === 'rainbow' ? undefined : `background:${value}`,
+    'aria-label': label, title: label, 'aria-pressed': String(selected),
+    onclick: () => {
+      for (const swatch of button.parentElement.querySelectorAll('.color')) {
+        swatch.classList.toggle('sel', swatch === button);
+        swatch.setAttribute('aria-pressed', String(swatch === button));
+      }
+      onSelect(value);
+    },
+  });
+  return button;
+}
 
 // ---------- звери-наклейки ----------
 // [цвет, второй цвет, уши, особенности]

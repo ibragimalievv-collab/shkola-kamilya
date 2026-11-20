@@ -2,7 +2,7 @@
 // после этого всё берётся из сохранённой копии. Приложение ни к каким чужим адресам не обращается.
 
 // При любом изменении файлов приложения увеличьте номер версии — устройства скачают обновление.
-const VERSION = 'shkola-kamilya-30';
+const VERSION = 'shkola-kamilya-31';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
@@ -21,7 +21,7 @@ const AUDIO = 'shkola-audio';
 
 self.addEventListener('activate', e => {
   // Удаляем сохранённые копии прошлых версий (записи голоса не трогаем).
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== AUDIO).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION && /^shkola-kamilya-\d+$/.test(k)).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;

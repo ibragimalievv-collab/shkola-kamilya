@@ -151,3 +151,15 @@ test('сброс прогресса и испорченная память не 
   broken.setItem('shkola-kamilya-v1', '{испорчено');
   assert.equal(createStore(broken).nextLevel().id, LEVELS[0].id);
 });
+
+test('неудачное восстановление не заменяет текущий профиль', () => {
+  const mem = fakeStorage(), store = createStore(mem);
+  store.finishLevel(LEVELS[0], 3);
+  const incoming = createStore(fakeStorage()).exportText();
+  mem.setItem = () => { throw new Error('Нет места'); };
+  assert.throws(() => store.importText(incoming), /Нет места/);
+  assert.equal(store.stars(LEVELS[0].id), 3);
+  const broken = JSON.parse(incoming); delete broken.profiles[broken.current].levels;
+  assert.throws(() => store.importText(JSON.stringify(broken)), /Повреждён/);
+  assert.equal(store.stars(LEVELS[0].id), 3);
+});

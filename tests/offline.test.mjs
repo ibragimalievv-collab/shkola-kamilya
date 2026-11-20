@@ -99,3 +99,23 @@ test('счётчик владельца: без кода ничего не от�
   assert.ok(validCode('shkola-kamilya') && !validCode('') && !validCode('a.b'));
   assert.ok(COUNTER === '' || validCode(COUNTER));
 });
+
+test('первый запуск сохраняет список фраз и общий голос до подключения сервис-воркера', async t => {
+  const files = new Map([['audio/old.bin', new Response('old')]]);
+  const cache = {
+    put: async (key, response) => files.set(key, response),
+    keys: async () => [...files.keys()].map(key => new Request('https://shkola.test/' + key)),
+    delete: async req => files.delete(new URL(req.url).pathname.slice(1)),
+  };
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'caches');
+  Object.defineProperty(globalThis, 'caches', { configurable: true, value: { open: async () => cache } });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'caches', previous); else delete globalThis.caches; });
+  t.mock.method(globalThis, 'fetch', async url => url === 'audio/manifest.json'
+    ? Response.json({ packs: { common: { file: 'common.new.bin', items: [] } } })
+    : new Response('voice'));
+  const { initVoice, loadPack } = await import('../app/js/audio.js');
+  await initVoice();
+  await loadPack('common');
+  assert.deepEqual([...files.keys()].sort(), ['audio/common.new.bin', 'audio/manifest.json']);
+  assert.equal(await files.get('audio/common.new.bin').text(), 'voice');
+});

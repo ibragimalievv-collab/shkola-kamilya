@@ -1,9 +1,10 @@
+import { adultAction } from './adult.js';
 // ГЛАВНЫЙ ФАЙЛ ДЕТСКОЙ ЧАСТИ: экраны и переходы между ними.
 // Приветствие → раскраска помощника → карта островов → остров → уровень → награда.
 
 import { h, makeRng, today, twice } from './util.js';
 import { idb } from './db.js';
-import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
+import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, firstBookCard, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { STORIES } from './stories.js';
 import { photoScreen, openArtwork, openLocalArtwork, resumeArtwork, LINE_ART_TYPES } from './photo.js';
 import { ARTWORK, artForIsland } from './artwork.js';
@@ -96,6 +97,7 @@ function welcome() {
         playLevel(LEVELS[0]);
       } }, 'Сразу к первому уроку') : null,
     // Кнопка для взрослого: вписать имя своего ребёнка (то же самое есть в разделе «Для родителей»).
+    h('a', { class: 'privacy-link', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Для родителей · Данные игры'),
     h('button', { class: 'name-btn', onclick: () => {
       const n = prompt('Как зовут ребёнка? Это имя будет на заставке и в разделе для родителей.', store.profile.name);
       if (n && n.trim()) { store.profile.name = n.trim().slice(0, 20); store.save(); welcome(); say(named() ? P.hi(store.profile.name).split('!')[0] + '!' : `${P.hiStart} ${nameTok()}!`); } // сразу произносим новое имя
@@ -231,7 +233,7 @@ function chooseIslandArt(isl, back, options, note) {
     own.disabled = true;
     try { await openLocalArtwork(X, file, back, options); } finally { own.disabled = false; }
   } });
-  const own = h('button', { type: 'button', class: 'reward-action', onclick: () => input.click() }, 'Загрузить одно фото или раскраску');
+  const own = h('button', { type: 'button', class: 'reward-action', onclick: () => adultAction('Выбрать фотографию или рисунок на устройстве?', () => input.click()) }, 'Загрузить одно фото или раскраску');
   const main = artForIsland(isl);
   const gallery = h('div', { class: 'artwork-shelf' }, [main, ...ARTWORK.filter(a => a !== main)].map(art => h('button', {
     class: 'artwork-card', type: 'button',
@@ -322,6 +324,7 @@ function island(isl) {
   screen('island-view', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }),
     ibtn('🔊', 'название острова', () => say(isl.title))),
   h('div', { class: 'ihead', style: `--col:${LINE_COLOR[isl.line]}` }, h('span', { html: islandSVG(isl.line) })),
+  firstBookCard(X, isl, () => island(isl)),
   islandReward(isl, () => island(isl)),
   storyStrip(X, isl),
   h('div', { class: 'path' }, nodes),
@@ -329,11 +332,23 @@ function island(isl) {
   say(isl.title);
 }
 
+// Время занятия останавливается, пока вкладка скрыта (например, во время звонка).
+let elapsedVisible = 0, visibleSince = document.hidden ? null : performance.now();
+const lessonClock = () => elapsedVisible + (visibleSince === null ? 0 : performance.now() - visibleSince);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    elapsedVisible = lessonClock();
+    visibleSince = null;
+    hush();
+  } else if (visibleSince === null) visibleSince = performance.now();
+});
+
 // ---------- уровень ----------
 function playLevel(level) {
   if (store.overLimit()) return rest('limit');
   const isl = ISLANDS[level.island];
   loadPack(isl.id);
+  if (isl.id === 'r1' && level === isl.levels.at(-1)) loadPack('books');
   const r = makeRng(Date.now() % 2147483647);
   const queue = buildSession(level, store.weakList(), r);
   const fam = store.part('family', []);
@@ -343,9 +358,9 @@ function playLevel(level) {
   }
   prepare([level.intro, ...queue.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...queue.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
   const total = queue.length;
-  let firstTry = 0, solved = 0, misses = 0, t0 = Date.now(), alive = true;
+  let firstTry = 0, solved = 0, misses = 0, t0 = lessonClock(), alive = true;
   let ease = 0, okRow = 0, failRow = 0; // подстройка сложности: -1 проще, 0 как есть, +1 труднее
-  const leave = () => { alive = false; store.addTime((Date.now() - t0) / 1000); island(isl); };
+  const leave = () => { alive = false; store.addTime((lessonClock() - t0) / 1000); island(isl); };
 
   // Объяснение перед заданиями.
   const show = level.show ? h('div', { class: 'letter-card' },
@@ -410,7 +425,7 @@ function playLevel(level) {
   function finish() {
     if (level.demo) return map();
     const stars = misses <= 1 ? 3 : misses <= 4 ? 2 : 1;
-    store.addTime((Date.now() - t0) / 1000);
+    store.addTime((lessonClock() - t0) / 1000);
     const first = !store.stars(level.id);
     const wasReady = islandRewardOpen(store, isl);
     const res = store.finishLevel(level, stars, { firstTry, total });
@@ -429,6 +444,7 @@ function reward(level, stars, sticker, first, artUnlocked = false) {
   const go = () => (sticker && !store.part('shown', {})[isl.id] ? showDad(X, isl, onward) : onward());
   screen('reward', h('div', { class: 'confetti' }, Array.from({ length: 24 }, (_, i) => h('i', { style: `--x:${(i * 37) % 100}%;--c:${PALETTE[i % 9]};--t:${1.6 + (i % 5) * 0.3}s;--dl:${(i % 7) * 0.12}s` }))),
     h('div', { class: 'stars huge', html: [1, 2, 3].map(i => starSVG(i <= stars)).join('') }),
+    sticker ? firstBookCard(X, isl, () => island(isl)) : null,
     hero('happy', 'big bounce'),
     h('div', { class: 'lesson-result' }, h('strong', {}, level.title), h('small', {}, 'Цель урока — ' + level.goal.toLocaleLowerCase('ru') + '.')),
     sticker || artUnlocked ? islandReward(isl, () => island(isl)) : null,

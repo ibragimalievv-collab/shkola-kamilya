@@ -1,6 +1,7 @@
 // СТУДИЯ ГОЛОСА (родительский раздел): записать буквы, слоги и слова своим голосом.
 // Запись хранится только на устройстве. Где запись есть — она звучит вместо синтезатора.
 
+import { toggleRecording } from './record.js';
 import { h } from './util.js';
 import { ORDER, WORDS } from './data.js';
 import { syllables } from './tasks.js';
@@ -12,26 +13,12 @@ const GROUPS = [
   { title: 'Слова', prefix: 'ш:', tip: 'Произносите слово спокойно и чётко, как вы говорите ребёнку.', items: () => WORDS.map(w => ['ш:' + w.w, w.w]) },
 ];
 
-let rec = null; // идущая запись: { key, recorder, stream, timer }
-
-async function toggle(key, btn, refresh) {
-  if (rec) { const same = rec.key === key; rec.recorder.stop(); if (same) return; }
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { alert('Нет доступа к микрофону. Разрешите его для приложения в настройках устройства.'); return; }
-  const recorder = new MediaRecorder(stream), chunks = [];
-  recorder.ondataavailable = e => chunks.push(e.data);
-  recorder.onstop = async () => {
-    clearTimeout(rec?.timer);
-    stream.getTracks().forEach(t => t.stop());
-    rec = null;
-    btn.classList.remove('recording');
-    const blob = new Blob(chunks, { type: recorder.mimeType });
-    if (blob.size > 500) { await saveClip(key, blob); refresh(); playClip(key); }
-  };
-  rec = { key, recorder, stream, timer: setTimeout(() => recorder.state === 'recording' && recorder.stop(), 4000) };
-  btn.classList.add('recording');
-  recorder.start();
+function toggle(key, btn, refresh) {
+  toggleRecording(btn, 4000, async blob => {
+    if (blob.size <= 500) return;
+    try { await saveClip(key, blob); if (btn.isConnected && !document.hidden) { refresh(); playClip(key); } }
+    catch { alert('Не удалось сохранить запись. Проверьте свободное место на устройстве.'); }
+  }, () => alert('Нет доступа к микрофону или записи звука. Проверьте разрешение в настройках устройства.'));
 }
 
 // Кнопки для одной записи: записать, прослушать, удалить.

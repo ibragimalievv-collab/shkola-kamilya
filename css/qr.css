@@ -1,0 +1,9 @@
+.progress-qr-dialog { width: min(94vw, 34rem); max-height: 92dvh; overflow: auto; text-align: center; }
+.progress-qr-dialog h2 { margin-top: 0; }
+.progress-qr-dialog .pbtn { margin: .35rem; }
+.progress-qr { display: block; width: min(100%, 28rem); height: auto; margin: .75rem auto; image-rendering: pixelated; }
+.progress-qr-link { width: 100%; resize: vertical; min-height: 5rem; padding: .5rem; font: 14px system-ui, sans-serif; user-select: text; -webkit-user-select: text; }
+.progress-qr-dialog .hint { text-align: left; }
+.progress-receiver { margin: 0; padding: 1.5rem; background: #fffdf5; color: #26384f; font: 18px/1.6 system-ui,sans-serif; }
+.progress-receiver main { max-width: 38rem; margin: 2rem auto; }
+.progress-receiver a { color: #135a80; }

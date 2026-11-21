@@ -110,3 +110,41 @@ test('перенос переносит рисунки и сохранение �
   assert.equal(await (await b.get('reads', dst.profile.reads[0].id)).text(), 'voice');
   assert.equal(dst.state.profiles.p1.levels[level.id], undefined);
 });
+
+test('фотографии всех попыток письма переносятся вместе с оценками в чистый профиль', async () => {
+  const src = createLocal(), dst = createLocal(), sourceDB = memoryDB(), targetDB = memoryDB();
+  const page = (photo, stars) => ({ d: '2026-11-21', t: 1, photo, stars, note: 'Обведи ещё раз' });
+  src.profile.pen = {
+    e1: { works: [page('ph-a', 2), page('ph-b', 3), page(null, 1)] },
+    e2: { photo: 'old-key', works: [] },
+  };
+  await sourceDB.putBatch(['ph-a', 'ph-b', 'old-key'].map(key => ({
+    store: 'photos', key, blob: new Blob(['source-' + key], { type: 'image/jpeg' }),
+  })));
+  await targetDB.putBatch([{ store: 'photos', key: 'ph-a', blob: new Blob(['another child']) }]);
+  const data = readProfileFile(await exportProfileFile(src, sourceDB));
+  assert.deepEqual(data.media.map(([, key]) => key).sort(), ['old-key', 'ph-a', 'ph-b']);
+  await restoreProfileFile(dst, data, undefined, targetDB);
+  for (const [i, original] of src.profile.pen.e1.works.entries()) {
+    const restored = dst.profile.pen.e1.works[i];
+    assert.deepEqual({ ...restored, photo: original.photo }, original);
+    if (original.photo === null) assert.equal(restored.photo, null);
+    else {
+      assert.notEqual(restored.photo, original.photo);
+      assert.equal(await (await targetDB.get('photos', restored.photo)).text(), 'source-' + original.photo);
+    }
+  }
+  assert.equal(await (await targetDB.get('photos', dst.profile.pen.e2.photo)).text(), 'source-old-key');
+  assert.equal(await (await targetDB.get('photos', 'ph-a')).text(), 'another child');
+
+  // Старая копия хранила строки работ, но пропускала вложенные фотографии.
+  const oldFile = { ...data, media: data.media.filter(([, key]) => key === 'old-key') };
+  await restoreProfileFile(dst, oldFile, undefined, targetDB);
+  const recovered = dst.profile.pen.e1.works;
+  assert.equal(await (await targetDB.get('photos', recovered[0].photo)).text(), 'source-ph-a');
+  assert.equal(await (await targetDB.get('photos', recovered[1].photo)).text(), 'source-ph-b');
+  const fresh = createLocal();
+  await restoreProfileFile(fresh, oldFile, undefined, targetDB);
+  assert.deepEqual(fresh.profile.pen.e1.works.map(w => w.photo), [null, null, null]);
+  assert.equal(fresh.profile.pen.e1.works[0].stars, 2);
+});

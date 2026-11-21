@@ -4,7 +4,7 @@ import { adultAction } from './adult.js';
 
 import { h, makeRng, today, twice } from './util.js';
 import { idb } from './db.js';
-import { drawPet, freeDraw, homeScreen, homeNew, library, booksOpen, firstBookCard, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
+import { drawPet, namePet, freeDraw, homeScreen, homeNew, library, booksOpen, firstBookCard, storyCard, storyStrip, surprise, dayDone, placement, showDad, petImg } from './fun.js';
 import { STORIES } from './stories.js';
 import { photoScreen, openArtwork, openLocalArtwork, resumeArtwork, LINE_ART_TYPES } from './photo.js';
 import { ARTWORK, artForIsland } from './artwork.js';
@@ -64,6 +64,11 @@ const helloText = () => (named() ? P.hi(store.profile.name) : callable() ? `${P.
 const praise = () => pickNew(named() ? [...PRAISE, ...PRAISE_NAME(store.profile.name)] : callable() ? [...PRAISE, `${P.praiseStart1} ${nameTok()}!`, `${P.praiseStart2} ${nameTok()}! ${P.praiseEnd2}`] : PRAISE, 'praise');
 // Общий набор для экранов из файла fun.js.
 const X = { store, app, screen, hero, ibtn, say, map };
+function editDrawnHero(back) {
+  const pet = store.profile.pet;
+  if (pet?.img) return namePet(X, pet.img, pet.name || '', 'К настройкам', back, back);
+  drawPet(X, back, back);
+}
 // Сохранить запись чтения вслух (только на устройстве; храним последние 60).
 async function saveRead(blob, text) {
   const id = 'rd-' + Date.now();
@@ -203,7 +208,7 @@ function map() {
       ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map)),
       ibtn('🎨', 'раскраски', () => photoScreen(X, map)),
       // Кнопка для взрослых — с подписью, чтобы родители сразу видели, куда им заходить (внутри — задачка на умножение).
-      h('button', { class: 'parent-btn', 'aria-label': 'настройки для родителей', onclick: () => { sfx('tap'); openParent({ store, app, back: map, repaint: () => paintHero(map), placement: () => placement(X, map) }); } },
+      h('button', { class: 'parent-btn', 'aria-label': 'настройки для родителей', onclick: () => { sfx('tap'); openParent({ store, app, back: map, repaint: () => paintHero(map), editDrawnHero, placement: () => placement(X, map) }); } },
         h('span', {}, '⚙️'), h('span', { class: 'parent-txt' }, h('b', {}, 'Настройки'), h('small', {}, 'для родителей')))),
     next ? h('button', { class: 'map-next', 'aria-label': 'играть дальше', onclick: () => { sfx('tap'); playLevel(next); } },
       '▶ Продолжить', h('small', {}, next.title)) : null, notice, sea, locked ? fold : null);

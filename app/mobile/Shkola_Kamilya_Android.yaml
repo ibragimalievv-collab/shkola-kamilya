@@ -1,0 +1,22 @@
+appId: com.android.chrome
+name: "Школа Камиля — раскраска, возврат и все уровни"
+---
+# Первый запуск Chrome и выбор браузера по умолчанию пройдите на телефоне заранее.
+- openLink:
+    link: "https://ibragimalievv-collab.github.io/shkola-kamilya/?try=coloring"
+    browser: true
+- extendedWaitUntil:
+    visible: "Щенки у маяка"
+    timeout: 90000
+- tapOn: "подсказка: что ещё не закрашено"
+- tapOn: "К школе"
+- extendedWaitUntil:
+    visible: "начать"
+    timeout: 60000
+- openLink:
+    link: "https://ibragimalievv-collab.github.io/shkola-kamilya/?selftest"
+    browser: true
+- extendedWaitUntil:
+    visible: '[\s\S]*ВСЁ В ПОРЯДКЕ[\s\S]*'
+    timeout: 240000
+- takeScreenshot: shkola-kamilya-result

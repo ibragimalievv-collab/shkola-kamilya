@@ -45,6 +45,8 @@ function parentScreen(ctx) {
       btn('Добавить ребёнка', () => { const n = prompt('Имя второго ребёнка', ''); if (n && n.trim()) { store.addProfile(n.trim().slice(0, 20)); again(); } }),
       btn('Перекрасить помощника', repaint),
       Object.keys(st.profiles).length > 1 ? btn('Удалить этот профиль', () => { if (confirm(`Удалить профиль «${p.name}» со всем прогрессом?`)) { store.removeProfile(st.current); again(); } }, 'warn') : null),
+    h('div', { class: 'prow' }, p.pet?.img ? h('span', {}, 'Мой герой — ' + p.pet.name) : null,
+      btn(p.pet?.img ? 'Изменить имя героя' : 'Нарисовать героя', () => ctx.editDrawnHero(again))),
     voicedNames().includes(p.name) || p.name === 'Ребёнок' ? null : h('div', { class: 'fam-row' }, clipCell('и:' + p.name.toLowerCase(), `🎙 Записать имя «${p.name}»`)),
     voicedNames().includes(p.name) || p.name === 'Ребёнок' ? null : h('p', { class: 'hint' }, 'Помощник зовёт ребёнка по имени. Для этого имени готовой записи нет, поэтому его произносит встроенный голос устройства — он отличается от голоса помощника. Чтобы звучало лучше, запишите имя своим голосом: нажмите на кнопку, скажите имя и нажмите ещё раз.'),
     h('p', { class: 'hint' }, 'У каждого ребёнка свой прогресс, свой помощник и свои рисунки.'), profileTransferControls(store));
@@ -103,7 +105,8 @@ function parentScreen(ctx) {
     catch { voiceNote.textContent = 'Загрузка прервалась. Проверьте интернет и свободное место. Сохранённые наборы останутся, можно продолжить.'; }
     finally { downloading = false; getVoice.disabled = complete; }
   });
-  const road = card('Озвучка без интернета', voiceNote, getVoice);
+  const road = card('Озвучка без интернета', voiceNote, getVoice,
+    h('p', {}, h('a', { href: 'install.html', target: '_blank', rel: 'noopener' }, 'Как установить и проверить игру на своём устройстве')));
   const refreshVoice = () => {
     if (!downloading) voiceCacheStatus().then(info => { if (!downloading) showCache(info); }).catch(() => {
       if (!downloading) voiceNote.textContent = 'Список записей недоступен. Откройте игру с интернетом и попробуйте ещё раз.';

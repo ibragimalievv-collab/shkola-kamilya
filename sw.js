@@ -2,15 +2,16 @@
 // после этого всё берётся из сохранённой копии. Приложение ни к каким чужим адресам не обращается.
 
 // При любом изменении файлов приложения увеличьте номер версии — устройства скачают обновление.
-const VERSION = 'shkola-kamilya-37';
+const VERSION = 'shkola-kamilya-38';
 const FILES = [
-  './', 'index.html', 'privacy.html', 'install.html', 'mobile/Shkola_Kamilya_Android.yaml', 'manifest.webmanifest', 'css/style.css',
+  './', 'index.html', 'privacy.html', 'install.html', 'manifest.webmanifest', 'css/style.css', 'css/install.css',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'js/app.js', 'js/album.js', 'js/art.js', 'js/audio.js', 'js/canvas.js', 'js/counter.js', 'js/crafts.js', 'js/curriculum.js', 'js/cursive.js', 'js/data.js', 'js/db.js',
   'js/books.js', 'js/extra.js', 'js/fun.js', 'js/mail.js', 'js/mechanics.js', 'js/parent.js', 'js/parent2.js', 'js/pen.js', 'js/phrases.js', 'js/photo.js', 'js/pictures.js', 'js/review.js', 'js/speech.js', 'js/store.js', 'js/stories.js', 'js/tasks.js', 'js/things.js', 'js/util.js', 'js/voice.js',
   'js/artwork.js', 'js/paint-game.js', 'js/assembly.js', 'js/relief.js', 'js/record.js', 'js/adult.js', 'js/transfer.js', 'js/pair.js', 'js/transfer-screen.js',
   'artwork/lighthouse-puppies.jpg', 'artwork/turtle-octopus.jpg', 'artwork/spider-rescuer.jpg', 'artwork/night-glider.jpg',
   'artwork/cats-and-race-car.jpg', 'artwork/winter-capybara.jpg', 'artwork/sea-sponge.jpg', 'artwork/moon-music.jpg',
+  'mobile/Shkola_Kamilya_Android.yaml',
 ];
 
 self.addEventListener('install', e => {

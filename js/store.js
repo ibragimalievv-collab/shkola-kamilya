@@ -69,6 +69,7 @@ export function createStore(storage, now = () => today()) {
       const next = { ...state, current: id, profiles: { ...state.profiles, [id]: { ...profile, levels } } };
       storage.setItem(KEY, JSON.stringify(next));
       state = next;
+      saveFailed = false;
     },
     resetProfile() {
       const { name, linkId } = p();

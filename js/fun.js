@@ -23,54 +23,65 @@ const sayName = n => (picOf(n) ? tokW(n) : n);
 export const petImg = (store, cls = 'pet') => (store.profile.pet?.img ? h('img', { class: cls, src: store.profile.pet.img, alt: store.profile.pet.name || 'мой герой' }) : null);
 
 // ---------- свой герой: нарисовать и назвать ----------
-export function namePet({ store, screen, ibtn, say }, img, initial, backLabel, back, done) {
-  let chosen = PET_NAMES.includes(initial) ? initial : '';
-  const input = h('input', {
-    type: 'text', maxlength: 32, autocomplete: 'off', enterkeyhint: 'done',
-    placeholder: 'Например, Арман', value: chosen ? '' : initial,
-    oninput: () => { chosen = ''; update(); },
-  });
-  const message = h('p', { class: 'edit-hint', role: 'status' });
-  const save = h('button', { type: 'submit', class: 'edit-action edit-done' }, 'Сохранить имя');
-  const choices = PET_NAMES.map(n => h('button', { type: 'button', class: 'edit-action', onclick: () => {
-    chosen = n; input.value = ''; update(); sfx('tap'); say(n);
-  } }, n));
-  function update() {
-    choices.forEach((button, i) => button.setAttribute('aria-pressed', String(PET_NAMES[i] === chosen)));
-    save.disabled = !(chosen || input.value.trim());
-    message.textContent = '';
-  }
-  const form = h('form', { class: 'pet-name-form', onsubmit: e => {
-    e.preventDefault();
-    const name = chosen || input.value.trim();
-    if (!name) return;
-    const p = store.profile, previous = p.pet;
-    p.pet = { ...previous, img, name }; store.save();
-    if (store.saveFailed) {
-      p.pet = previous;
-      message.textContent = 'Не получилось сохранить героя на устройстве. Освободи место и попробуй ещё раз.';
-      return;
-    }
-    done();
-  } }, h('h1', {}, 'Как зовут героя?'), h('div', { class: 'pet-choices' }, choices),
-    h('label', { class: 'pet-own-name' }, 'Своё имя героя', input), save, message);
-  update();
-  screen('pet-name', h('div', { class: 'bar' },
-    h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: () => back(chosen || input.value) }, '‹ ' + backLabel),
-    h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.petName))),
-    h('div', { class: 'pet-name-body' }, h('img', { class: 'pet', src: img, alt: 'Мой рисунок' }), form));
-  say(P.petName);
+export function namePet(x, img, initial, backLabel, back, done) {
+  const { store, screen, ibtn, say } = x;
+  let name = initial || PET_NAMES[0];
+  let custom = !PET_NAMES.includes(name);
+  const next = () => {
+    const note = h('p', { class: 'edit-hint', role: 'status', id: 'pet-name-note' }, 'Выбери готовое имя или нажми «Свой вариант».');
+    const mark = () => {
+      btns.forEach((button, i) => {
+        const selected = !custom && PET_NAMES[i] === name;
+        button.classList.toggle('right', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      });
+      customButton.classList.toggle('right', custom);
+      customButton.setAttribute('aria-pressed', String(custom));
+      inputRow.hidden = !custom;
+    };
+    const input = h('input', { id: 'pet-name-input', type: 'text', value: name, maxlength: 32, enterkeyhint: 'done',
+      autocomplete: 'off', placeholder: 'Например, Искрик', 'aria-describedby': 'pet-name-note',
+      oninput: e => { custom = true; name = e.target.value; input.removeAttribute('aria-invalid'); mark(); } });
+    const btns = PET_NAMES.map(n => h('button', { type: 'button', class: 'opt', onclick: () => {
+      custom = false; name = n; input.value = n; input.removeAttribute('aria-invalid'); mark(); sfx('tap'); say(n);
+    } }, h('span', { class: 'txt longish' }, n)));
+    const inputRow = h('div', { class: 'pet-name-field' }, h('label', { for: 'pet-name-input' }, 'Имя твоего героя'), input);
+    const customButton = h('button', { type: 'button', class: 'opt', onclick: () => {
+      custom = true; mark(); input.focus(); input.select();
+    } }, h('span', { class: 'txt longish' }, 'Свой вариант'));
+    mark();
+    const form = h('form', { class: 'pet-name-form', onsubmit: e => {
+      e.preventDefault();
+      const chosen = name.replace(/\s+/gu, ' ').trim().slice(0, 32);
+      if (!chosen) {
+        note.textContent = 'Напиши имя героя или выбери готовое.';
+        input.setAttribute('aria-invalid', 'true'); input.focus(); return;
+      }
+      name = chosen;
+      const previous = store.profile.pet;
+      store.profile.pet = { ...previous, img, name }; store.save();
+      if (store.saveFailed) {
+        if (previous) store.profile.pet = previous; else delete store.profile.pet;
+        note.textContent = 'Не удалось сохранить героя. Освободи место на устройстве и нажми «Готово» ещё раз.';
+        return;
+      }
+      done();
+    } }, h('h2', {}, 'Как зовут героя?'), h('div', { class: 'opts' }, btns, customButton), inputRow, note,
+      h('button', { type: 'submit', class: 'edit-action edit-done' }, 'Готово ✓'));
+    screen('pet-name', h('div', { class: 'bar' }, h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: () => back(name) }, backLabel), h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.petName))), h('img', { class: 'pet big', src: img, alt: 'мой герой' }), form);
+    say(P.petName);
+  };
+  next();
 }
 
 export function drawPet(x, done, back) {
-  const { screen, ibtn, say } = x;
+  const { store, screen, ibtn, say } = x;
   const b = makeBoard({ brush: 16, editing: true });
-  let draftName = PET_NAMES[0];
   const feedback = h('p', { class: 'edit-hint', role: 'status' });
+  let name = store.profile.pet?.name || PET_NAMES[0];
   const next = () => {
     if (b.ink() < 150) { feedback.textContent = P.needDraw2; say(P.needDraw2); return; }
-    const img = b.cutout(220);
-    namePet(x, img, draftName, 'К рисунку', name => { draftName = name; draw(); }, done);
+    namePet(x, b.cutout(220), name, '‹ К рисунку', value => { name = value; draw(); }, done);
   };
   function draw() {
     screen('pet-draw', h('div', { class: 'edit-actions' },

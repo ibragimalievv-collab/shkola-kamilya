@@ -103,6 +103,7 @@ function welcome() {
       } }, 'Сразу к первому уроку') : null,
     // Кнопка для взрослого: вписать имя своего ребёнка (то же самое есть в разделе «Для родителей»).
     h('a', { class: 'privacy-link', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Для родителей · Данные игры'),
+    h('a', { class: 'privacy-link', href: 'install.html', target: '_blank', rel: 'noopener' }, 'Как запустить на телефоне'),
     h('button', { class: 'name-btn', onclick: () => {
       const n = prompt('Как зовут ребёнка? Это имя будет на заставке и в разделе для родителей.', store.profile.name);
       if (n && n.trim()) { store.profile.name = n.trim().slice(0, 20); store.save(); welcome(); say(named() ? P.hi(store.profile.name).split('!')[0] + '!' : `${P.hiStart} ${nameTok()}!`); } // сразу произносим новое имя

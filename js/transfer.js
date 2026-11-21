@@ -15,11 +15,19 @@ export function readProfileLink(hash) {
   return LINK.test(id || '') ? id : null;
 }
 
+function notebookPages(profile) {
+  return Object.values(profile?.pen || {})
+    .flatMap(task => [task, ...(task?.works || [])])
+    .filter(work => typeof work?.photo === 'string' && work.photo);
+}
+
+const originalKey = key => key.replace(/^(?:copy:[a-f0-9]{32}:[a-f0-9-]{12}:)+/, '');
+
 function mediaFor(profile) {
   const photos = new Set(), reads = new Set(), clips = new Set(['и:' + profile.name.toLowerCase()]);
   for (const { id } of profile.colorings || []) for (const suffix of ['', '-p', '-t', '-o']) photos.add(id + suffix);
   for (const { id } of profile.album || []) photos.add(id);
-  for (const { photo } of Object.values(profile.pen || {})) if (photo) photos.add(photo);
+  for (const { photo } of notebookPages(profile)) photos.add(photo);
   for (const { picture } of Object.values(profile.assemblies || {})) if (picture) photos.add(picture);
   for (const { id } of profile.reads || []) reads.add(id);
   for (const word of profile.family || []) clips.add('ш:' + word.toLowerCase());
@@ -64,8 +72,7 @@ export async function restoreProfileFile(store, data, expectedLink, db = idb) {
   const prefix = 'copy:' + profile.linkId + ':' + globalThis.crypto.randomUUID().slice(0, 12) + ':';
   const copy = key => {
     if (!key) return key;
-    const raw = key.replace(/^(?:copy:[a-f0-9]{32}:[a-f0-9-]{12}:)+/, '');
-    return prefix + raw;
+    return prefix + originalKey(key);
   };
   const records = data.media.map(row => {
     if (!Array.isArray(row) || row.length !== 4) throw new Error('Файл переноса повреждён.');
@@ -84,7 +91,20 @@ export async function restoreProfileFile(store, data, expectedLink, db = idb) {
   }
   for (const [island, id] of Object.entries(profile.rewardPaintings || {})) profile.rewardPaintings[island] = copy(id);
   for (const item of profile.album || []) item.id = copy(item.id);
-  for (const item of Object.values(profile.pen || {})) if (item.photo) item.photo = copy(item.photo);
+  // Старые файлы могли содержать оценки и ссылки без самих снимков.
+  // При обновлении профиля сохраняем доступное фото только этого же ребёнка.
+  const previousPhotos = new Map(notebookPages(previous).map(({ photo }) => [originalKey(photo), photo]));
+  for (const work of notebookPages(profile)) {
+    const key = work.photo, tag = 'photos:' + key;
+    if (!used.has(tag)) {
+      const localKey = previousPhotos.get(originalKey(key));
+      const blob = localKey && await db.get('photos', localKey);
+      if (!blob) { work.photo = null; continue; }
+      records.push({ store: 'photos', key: copy(key), blob });
+      used.add(tag);
+    }
+    work.photo = copy(key);
+  }
   for (const item of Object.values(profile.assemblies || {})) if (item.picture) item.picture = copy(item.picture);
   for (const item of profile.reads || []) item.id = copy(item.id);
   const writes = [];

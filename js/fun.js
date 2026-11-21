@@ -23,19 +23,54 @@ const sayName = n => (picOf(n) ? tokW(n) : n);
 export const petImg = (store, cls = 'pet') => (store.profile.pet?.img ? h('img', { class: cls, src: store.profile.pet.img, alt: store.profile.pet.name || 'мой герой' }) : null);
 
 // ---------- свой герой: нарисовать и назвать ----------
+export function namePet({ store, screen, ibtn, say }, img, initial, backLabel, back, done) {
+  let chosen = PET_NAMES.includes(initial) ? initial : '';
+  const input = h('input', {
+    type: 'text', maxlength: 32, autocomplete: 'off', enterkeyhint: 'done',
+    placeholder: 'Например, Арман', value: chosen ? '' : initial,
+    oninput: () => { chosen = ''; update(); },
+  });
+  const message = h('p', { class: 'edit-hint', role: 'status' });
+  const save = h('button', { type: 'submit', class: 'edit-action edit-done' }, 'Сохранить имя');
+  const choices = PET_NAMES.map(n => h('button', { type: 'button', class: 'edit-action', onclick: () => {
+    chosen = n; input.value = ''; update(); sfx('tap'); say(n);
+  } }, n));
+  function update() {
+    choices.forEach((button, i) => button.setAttribute('aria-pressed', String(PET_NAMES[i] === chosen)));
+    save.disabled = !(chosen || input.value.trim());
+    message.textContent = '';
+  }
+  const form = h('form', { class: 'pet-name-form', onsubmit: e => {
+    e.preventDefault();
+    const name = chosen || input.value.trim();
+    if (!name) return;
+    const p = store.profile, previous = p.pet;
+    p.pet = { ...previous, img, name }; store.save();
+    if (store.saveFailed) {
+      p.pet = previous;
+      message.textContent = 'Не получилось сохранить героя на устройстве. Освободи место и попробуй ещё раз.';
+      return;
+    }
+    done();
+  } }, h('h1', {}, 'Как зовут героя?'), h('div', { class: 'pet-choices' }, choices),
+    h('label', { class: 'pet-own-name' }, 'Своё имя героя', input), save, message);
+  update();
+  screen('pet-name', h('div', { class: 'bar' },
+    h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: () => back(chosen || input.value) }, '‹ ' + backLabel),
+    h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.petName))),
+    h('div', { class: 'pet-name-body' }, h('img', { class: 'pet', src: img, alt: 'Мой рисунок' }), form));
+  say(P.petName);
+}
+
 export function drawPet(x, done, back) {
-  const { store, screen, ibtn, say } = x;
+  const { screen, ibtn, say } = x;
   const b = makeBoard({ brush: 16, editing: true });
+  let draftName = PET_NAMES[0];
   const feedback = h('p', { class: 'edit-hint', role: 'status' });
   const next = () => {
     if (b.ink() < 150) { feedback.textContent = P.needDraw2; say(P.needDraw2); return; }
     const img = b.cutout(220);
-    let name = PET_NAMES[0];
-    const btns = PET_NAMES.map(n => h('button', { class: 'opt', onclick: e => { name = n; sfx('tap'); say(n); btns.forEach(q => q.classList.toggle('right', q === e.currentTarget)); } }, h('span', { class: 'txt longish' }, n)));
-    btns[0].classList.add('right');
-    screen('pet-name', h('div', { class: 'bar' }, h('button', { class: 'edit-action', 'aria-label': 'назад', onclick: draw }, '‹ К рисунку'), h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.petName))), h('img', { class: 'pet big', src: img, alt: 'мой герой' }), h('div', { class: 'opts' }, btns),
-      ibtn('▶', 'готово', () => { store.profile.pet = { img, name }; store.save(); done(); }, 'play'));
-    say(P.petName);
+    namePet(x, img, draftName, 'К рисунку', name => { draftName = name; draw(); }, done);
   };
   function draw() {
     screen('pet-draw', h('div', { class: 'edit-actions' },
@@ -80,7 +115,9 @@ export function homeScreen(x, back) {
   draw();
   const nextItem = HOME_ITEMS.find(it => stars < it[2]);
   const text = P.home + ' ' + (nextItem ? P.homeNext(nextItem[2] - stars) : P.homeAll);
-  screen('home', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'score dark' }, h('span', { html: starSVG(true) }), stars), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(text), 'speak')), room, tray);
+  screen('home', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'score dark' }, h('span', { html: starSVG(true) }), stars),
+    store.profile.pet?.name ? h('span', { class: 'home-pet-name' }, store.profile.pet.name) : null,
+    h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(text), 'speak')), room, tray);
   say(text);
 }
 // Сколько вещей для домика открыто, но ещё не расставлено (значок на карте).

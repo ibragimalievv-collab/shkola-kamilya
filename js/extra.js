@@ -35,7 +35,11 @@ function oneTask(x, t, { back, head = [], done }) {
 }
 
 // ---------- магазин игрушек ----------
-const TOYS = ['🧸', '🚗', '⚽', '🪁', '🎈', '🚂', '🎲', '🧩', '🥁', '🚁', '⛵', '🤖'];
+const TOYS = [
+  ['🧸', 'Медвежонок'], ['🚗', 'Машинка'], ['⚽', 'Футбольный мяч'], ['🪁', 'Воздушный змей'],
+  ['🎈', 'Воздушный шарик'], ['🚂', 'Паровоз'], ['🎲', 'Игральный кубик'], ['🧩', 'Пазл'],
+  ['🥁', 'Барабан'], ['🚁', 'Вертолёт'], ['⛵', 'Парусник'], ['🤖', 'Робот'],
+];
 export const shopOpen = store => islandDone(store, 'm2');
 // Цены растут вместе с тем, что ребёнок уже умеет считать.
 const priceCap = store => (islandDone(store, 'm10') ? 50 : islandDone(store, 'm5') ? 20 : 10);
@@ -47,10 +51,11 @@ export function shopScreen(x, back, note) {
   const again = () => shopScreen(x, back);
   const buy = i => {
     const price = toyPrice(i, st.round, cap), have = [10, 20, 50, 100].find(v => v > price);
+    const [icon] = TOYS[i];
     // Иногда платим одной крупной монетой и считаем сдачу (когда вычитание уже пройдено).
     const change = islandDone(store, 'm3') && Math.random() < 0.4;
-    const t = makeTask(change ? ['changeBuy', price, have] : ['shopBuy', price, TOYS[i]], rng());
-    oneTask(x, t, { back: again, head: [h('span', { class: 'score dark' }, TOYS[i], ` ${price} ₽`)], done: good => {
+    const t = makeTask(change ? ['changeBuy', price, have] : ['shopBuy', price, icon], rng());
+    oneTask(x, t, { back: again, head: [h('span', { class: 'score dark' }, icon, ` ${price} ₽`)], done: good => {
       if (good) { st.got[i] = 1; st.sum++; store.save(); sfx('star'); }
       shopScreen(x, back, good ? P.shopBought : P.shopTry);
     } });
@@ -58,9 +63,12 @@ export function shopScreen(x, back, note) {
   if (TOYS.every((_, i) => st.got[i])) { st.round++; st.got = {}; store.save(); return shopScreen(x, back, P.shopAll); }
   const text = note || P.shopHello;
   screen('library', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', back), h('span', { class: 'score dark' }, '🛍️', st.sum), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.shopHello), 'speak')),
-    h('div', { class: 'shelf' }, TOYS.map((toy, i) => h('button', { class: 'book toy' + (st.got[i] ? ' done' : ''), 'aria-label': 'игрушка',
-      onclick: () => { sfx('tap'); st.got[i] ? say(P.shopHave) : buy(i); } },
-    h('span', { class: 'cover' }, toy), st.got[i] ? h('span', { class: 'pen-mark' }, '✔') : h('b', {}, `${toyPrice(i, st.round, cap)} ₽`)))));
+    h('div', { class: 'shelf' }, TOYS.map(([icon, name], i) => {
+      const price = `${toyPrice(i, st.round, cap)} ₽`;
+      return h('button', { class: 'book toy' + (st.got[i] ? ' done' : ''), 'aria-label': `${name}, ${st.got[i] ? 'уже в коллекции' : price}`,
+        onclick: () => { sfx('tap'); st.got[i] ? say(P.shopHave) : buy(i); } },
+      h('span', { class: 'cover' }, icon), st.got[i] ? h('span', { class: 'pen-mark' }, '✔') : h('b', {}, price));
+    })));
   say(text);
 }
 

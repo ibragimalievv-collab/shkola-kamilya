@@ -126,6 +126,7 @@ svg { display: block; width: 100%; height: 100%; }
 .blob { width: clamp(70px, 17vmin, 124px); height: clamp(70px, 17vmin, 124px); font-size: 2.2em; display: grid; place-items: center; transition: transform .25s, opacity .25s; animation: float 3s ease-in-out infinite; animation-delay: var(--d); }
 .blob span { letter-spacing: 0; }
 .bubbles .blob { border-radius: 50%; background: radial-gradient(circle at 30% 28%, #fff 0 12%, #c8f1ff 13% 60%, #8fdcf7); box-shadow: 0 0 0 .4vmin #7ad0ee inset; }
+.collect.fish { padding-inline: 3vmin; }
 .fish .blob { border-radius: 60% 40% 40% 60% / 60% 50% 50% 40%; background: #ffb86b; position: relative; margin-right: 3vmin; animation-name: swim; color: #fff; text-shadow: 0 .3vmin 0 #c9792b; }
 .fish .blob::after { content: ""; position: absolute; right: -22%; top: 22%; border: solid transparent; border-width: calc(var(--s, 3.4vmin)) 0 calc(var(--s, 3.4vmin)) 4.4vmin; border-left-color: #ff924c; transform: scaleX(-1); }
 .fish .blob:nth-child(3n) { background: #ff8fa3; } .fish .blob:nth-child(3n+1) { background: #74c0fc; }
@@ -606,21 +607,20 @@ svg { display: block; width: 100%; height: 100%; }
 .edit-hint:empty, .map-note:empty { display: none; }
 #app.pet-draw .board { flex: none; }
 #app.pet-draw .board-stage { flex: none; width: min(100%, 55dvh * var(--ar)); max-height: none; }
-.pet-name-body { flex: 1 0 auto; width: min(100%, 36rem); display: grid; align-content: center; justify-items: center; gap: .6rem; }
-.pet-name-body > .pet { width: auto; height: auto; max-width: 45%; max-height: min(18dvh, 8rem); object-fit: contain; }
-.pet-name-form { width: 100%; display: grid; gap: .6rem; }
-.pet-name-form h1 { margin: 0; text-align: center; font-size: clamp(20px, 4vmin, 32px); }
-.pet-choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .35rem; }
-.pet-choices .edit-action { font-size: clamp(15px, 2.4vmin, 19px); padding: .25rem; }
-.pet-own-name { display: grid; gap: .25rem; text-align: left; font-size: 17px; font-weight: 650; }
-.pet-own-name input { box-sizing: border-box; width: 100%; min-height: 44px; font: inherit; border: 2px solid #819aaf; border-radius: .7rem; padding: .4rem .65rem; }
-.pet-name-form button:disabled { opacity: .55; }
+#app.pet-name { justify-content: space-evenly; }
+.pet-name-form { display: flex; flex-direction: column; align-items: center; gap: .8rem; width: min(100%, 44rem); flex: none; padding-bottom: max(.75rem, env(safe-area-inset-bottom)); }
+.pet-name-form label { font-weight: 750; }
+.pet-name-form h2 { margin: 0; font-size: 1.2em; }
+.pet-name-field { width: min(100%, 24rem); }
+.pet-name-field label { display: block; margin-bottom: .35rem; }
+.pet-name-form input { width: 100%; min-height: 48px; padding: .6rem .8rem; border: 2px solid #9ab5ce; border-radius: .75rem; background: #fff; color: #26384f; font: inherit; user-select: text; -webkit-user-select: text; }
+.pet-name-form input[aria-invalid="true"] { border-color: #bc3651; }
+.pet-name-form .edit-hint { margin: 0; text-align: center; }
+.pet-name-form .opt { min-width: 0; min-height: 48px; padding: .65rem .8rem; font-size: 1.15em; }
+.pet-name-form .opt .longish { font-size: 1em; }
+.pet-name-form .opts { gap: .65rem; }
 .home-pet-name { min-width: 0; overflow-wrap: anywhere; font-size: clamp(16px, 2.6vmin, 22px); font-weight: 700; }
-@media (max-width: 390px) { .pet-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (orientation: landscape) and (max-height: 480px) {
-  .pet-name-body { width: min(100%, 47rem); grid-template-columns: minmax(58px, 1fr) minmax(0, 3fr); align-items: center; }
-  .pet-name-body > .pet { max-height: 36dvh; max-width: 95%; }
-}
+.profile-pet-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .map-next { display: grid; width: min(100%, 30rem); margin: .25rem auto; }
 .map-next small, .lesson-result small { display: block; font-weight: 500; }
 .sea.compact .island.locked { display: none; }

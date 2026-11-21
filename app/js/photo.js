@@ -1054,8 +1054,18 @@ async function openPage(x, id, back, options = {}) {
   }
 
   // --- рисунок в объёме: кубик, который можно крутить пальцем ---
-  function cube() {
+  async function cube() {
     if (busy) return;
+    busy = true;
+    try { await keep(); }
+    catch {
+      busy = false;
+      gameNote.hidden = false;
+      gameNote.textContent = 'Не удалось сохранить рисунок. Проверь свободное место и попробуй ещё раз.';
+      say(P.photoFail); return;
+    }
+    busy = false;
+    if (!stage.isConnected) return;
     const url = compose(512).toDataURL('image/jpeg', 0.85), side = `background-image:url(${url})`;
     const box = h('div', { class: 'cube' }, ['front', 'back', 'right', 'left', 'top', 'bottom'].map(f => h('div', { class: 'face ' + f, style: side })));
     const scene = h('div', { class: 'cube-scene' }, box);
@@ -1067,7 +1077,7 @@ async function openPage(x, id, back, options = {}) {
     scene.addEventListener('pointerup', stop); scene.addEventListener('pointercancel', stop);
     const timer = setInterval(() => { if (!scene.isConnected) return clearInterval(timer); if (spin) { ry += 0.8; turn(); } }, 33);
     turn();
-    screen('level cube-screen', h('div', { class: 'bar' }, ibtn('◀', 'к раскраске', () => { clearInterval(timer); openPage(x, id, back); }), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.cube), 'speak')), scene);
+    screen('level cube-screen', h('div', { class: 'bar' }, ibtn('◀', 'к раскраске', () => { clearInterval(timer); openPage(x, id, back, options); }), h('span', { class: 'grow' }), ibtn('🔊', 'послушать', () => say(P.cube), 'speak')), scene);
     say(P.cube);
   }
 

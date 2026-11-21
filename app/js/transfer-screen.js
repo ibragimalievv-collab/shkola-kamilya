@@ -62,7 +62,11 @@ function sendDialog(store) {
     try {
       await sender.send(response.value, percent => { status.textContent = 'Передача: ' + percent + '%'; });
       form.hidden = true; status.textContent = 'Профиль сохранён на новом устройстве.';
-    } catch (error) { setMessage(status, error); send.disabled = false; }
+    } catch (error) {
+      setMessage(status, error);
+      sender.cancel(); sender = null; form.hidden = true;
+      status.textContent += ' Нажмите «Создать ссылку» и начните перенос заново. Или используйте резервную копию файлом.';
+    }
     finally { start.disabled = false; }
   });
   form.append(invite, button('Скопировать ссылку для переноса', () => copy(invite, status)), response, send);

@@ -22,6 +22,9 @@ test('приложение не обращается к чужим адреса�
     // Единственное исключение — счётчик открытий для владельца: один адрес в counter.js и разрешение на него в index.html.
     if (f === 'js/counter.js') text = text.replace('`https://${code}.goatcounter.com/count?', '');
     if (f === 'index.html') text = text.replace("blob: https://*.goatcounter.com;", 'blob:;');
+    // Родительская инструкция содержит только явную ссылку на официальный магазин браузера.
+    // Это обычная ссылка по нажатию взрослого, не сетевой запрос игры.
+    if (f === 'install.html') text = text.replace('href="https://play.google.com/store/apps/details?id=com.android.chrome"', 'href=""');
     assert.ok(!/https?:\/\//.test(text), `в файле ${f} есть внешний адрес`);
     assert.ok(!/\bimport\s*\(/.test(text) || true);
   }

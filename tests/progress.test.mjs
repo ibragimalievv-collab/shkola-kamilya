@@ -164,6 +164,24 @@ test('неудачное восстановление не заменяет те
   assert.equal(store.stars(LEVELS[0].id), 3);
 });
 
+test('успешное восстановление профиля снимает прежнюю ошибку записи', () => {
+  const mem = fakeStorage(), store = createStore(mem), write = mem.setItem;
+  store.finishLevel(LEVELS[0], 3);
+  mem.setItem = () => { throw new Error('Нет места'); };
+  store.save();
+  assert.equal(store.saveFailed, true);
+  const profile = { ...store.profile, linkId: 'a'.repeat(32), pet: { name: 'Искрик', img: 'data:image/png;base64,YQ==' } };
+  assert.throws(() => store.restoreProfile(profile), /Нет места/);
+  assert.equal(store.saveFailed, true);
+  assert.equal(store.profile.linkId, undefined);
+  mem.setItem = write;
+  store.restoreProfile(profile);
+  assert.equal(store.saveFailed, false);
+  const reopened = createStore(mem);
+  assert.equal(reopened.stars(LEVELS[0].id), 3);
+  assert.deepEqual(reopened.profile.pet, profile.pet);
+});
+
 test('отмена стартовой оценки сохраняет пройденный ребёнком урок и его результат', () => {
   const storage = fakeStorage();
   const store = createStore(storage, () => '2026-11-20');

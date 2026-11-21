@@ -225,7 +225,7 @@ test('альбом по месяцам: свежие месяцы и рисун�
 
 test('на экране не появляется слово «null»: пустые места не попадают в список того, что показать', () => {
   const dir = new URL('../app/js/', import.meta.url);
-  for (const f of readdirSync(dir)) {
+  for (const { name: f } of readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isFile())) {
     const text = readFileSync(new URL(f, dir), 'utf8');
     let i = 0;
     while ((i = text.indexOf('replaceChildren(', i)) >= 0) {

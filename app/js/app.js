@@ -545,7 +545,12 @@ function openProfile(link = null) {
     if (target) { store.switchProfile(target); setVoiceConfig(store.settings); }
     history.replaceState(null, '', transferLink(location.href, link));
   } else if (location.hash) history.replaceState(null, '', location.pathname + location.search);
-  welcome();
+  let fromQR = false;
+  try { fromQR = link && sessionStorage.getItem('shkola-qr-open') === link; if (fromQR) sessionStorage.removeItem('shkola-qr-open'); } catch { /* resume в ссылке остаётся доступным */ }
+  if (link && (fromQR || params.get('resume') === '1')) {
+    map();
+    app.querySelector('.map-note').textContent = 'Прогресс сохранён на этом устройстве. Можно продолжать с пройденных уровней.';
+  } else welcome();
 }
 
 function entry() {
@@ -555,7 +560,7 @@ function entry() {
     const link = readProfileLink(location.hash);
     if (link && !store.profileForLink(link)) {
       screen('transfer-screen', h('section', { class: 'pbox transfer-box' }, h('h1', {}, 'Профиль ещё не перенесён'),
-        h('p', {}, 'На старом устройстве откройте «Для родителей → Ребёнок → Перенести на другое устройство» и создайте временную ссылку.'),
+        h('p', {}, 'На старом устройстве откройте «Настройки для родителей → Ребёнок → QR-код с пройденными уровнями» и отсканируйте код новым устройством.'),
         h('button', { type: 'button', class: 'pbtn', onclick: () => openProfile() }, 'К школе')));
       return;
     }

@@ -17,8 +17,12 @@ test('в список для сохранения входят все файлы
 });
 
 test('приложение не обращается к чужим адресам в интернете', () => {
-  for (const f of [...onDisk, 'sw.js'].filter(f => /\.(js|html|css|webmanifest|svg)$/.test(f))) {
+  for (const f of [...onDisk, 'sw.js'].filter(f => /\.(m?js|html|css|webmanifest|svg)$/.test(f))) {
     let text = readFileSync(join(APP, f), 'utf8').replaceAll('http://www.w3.org/', '');
+    if (f === 'js/vendor/qrcode.mjs') {
+      assert.ok(!/\b(fetch|XMLHttpRequest|WebSocket)\b/.test(text), 'генератор QR не использует сеть');
+      text = text.replace(/\/\/[^\n]*/g, ''); // ссылки автора находятся в комментариях лицензии
+    }
     // Единственное исключение — счётчик открытий для владельца: один адрес в counter.js и разрешение на него в index.html.
     if (f === 'js/counter.js') text = text.replace('`https://${code}.goatcounter.com/count?', '');
     if (f === 'index.html') text = text.replace("blob: https://*.goatcounter.com;", 'blob:;');

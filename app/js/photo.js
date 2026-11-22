@@ -668,11 +668,30 @@ async function openPage(x, id, back, options = {}) {
     g.putImageData(img, 0, 0);
     return c;
   }
+  const grain = canvasOf(48, 48), grainCtx = grain.getContext('2d');
+  const grainPixels = grainCtx.createImageData(grain.width, grain.height), grainRandom = makeRng(41);
+  for (let i = 3; i < grainPixels.data.length; i += 4) {
+    const density = grainRandom();
+    grainPixels.data[i] = density < .16 ? 0 : density < .42 ? 120 : 255;
+  }
+  let grainColor, grainPattern;
+  function crayonInk(g, color) {
+    if (color !== grainColor) {
+      grainCtx.putImageData(grainPixels, 0, 0);
+      grainCtx.globalCompositeOperation = 'source-in';
+      grainCtx.fillStyle = color;
+      grainCtx.fillRect(0, 0, grain.width, grain.height);
+      grainPattern = g.createPattern(grain, 'repeat');
+      grainColor = color;
+    }
+    return grainPattern;
+  }
   function doSeg(g, op, i, clip) { // i-й отрезок мазка
     const a = op.pts[Math.max(0, i - 1)], b = op.pts[i], t = clip ? sc : g;
     if (clip) sc.clearRect(0, 0, W, H);
     t.globalCompositeOperation = op.erase ? 'destination-out' : 'source-over';
-    t.strokeStyle = op.c === 'rainbow' ? `rgb(${rainbow((op.h0 + i * 0.012) % 1)})` : op.c; t.lineWidth = op.size; t.lineCap = t.lineJoin = 'round';
+    const color = op.c === 'rainbow' ? `rgb(${rainbow((op.h0 + i * 0.012) % 1)})` : op.c;
+    t.strokeStyle = op.crayon ? crayonInk(t, color) : color; t.lineWidth = op.size; t.lineCap = t.lineJoin = 'round';
     t.beginPath(); t.moveTo(a[0], a[1]); t.lineTo(b[0], b[1]); t.stroke();
     t.globalCompositeOperation = 'source-over';
     if (clip) { sc.globalCompositeOperation = 'destination-in'; sc.drawImage(clip, 0, 0); sc.globalCompositeOperation = 'source-over'; g.drawImage(scratch, 0, 0); }
@@ -704,7 +723,9 @@ async function openPage(x, id, back, options = {}) {
     try { paint.setPointerCapture(e.pointerId); } catch { /* не страшно */ }
     pointer = e.pointerId;
     // На картинках с контурами кисть не выходит за участок; на фотографии границ не видно, поэтому там кисть свободная.
-    cur = { t: 'stroke', c: color, size, erase: tool === 'erase' ? 1 : 0, h0: hue, clip: !photo && tool === 'brush' ? [px, py] : null, pts: [[px, py]] };
+    const clip = !photo && (tool === 'brush' || tool === 'crayon') ? [px, py] : null;
+    cur = { t: 'stroke', c: color, size, erase: tool === 'erase' ? 1 : 0, h0: hue, clip, pts: [[px, py]] };
+    if (tool === 'crayon') cur.crayon = true;
     curClip = clipOf(cur);
     doSeg(pg, cur, 0, curClip);
   });
@@ -898,11 +919,18 @@ async function openPage(x, id, back, options = {}) {
   const stamps = h('div', { class: 'board-tools hidden-row' });
   STAMPS.forEach((e, i) => { const b = h('button', { class: 'tool-btn stamp-btn' + (i ? '' : ' sel'), 'aria-label': 'наклейка', onclick: () => { stamp = e; pickOne(stamps, 'stamp-btn', b); sfx('tap'); } }, e); stamps.append(b); });
   const sizes = h('span', { class: 'sizes off' });
-  const setTool = t => { tool = t; for (const [k, b] of Object.entries(toolBtns)) b.classList.toggle('sel', k === t); sizes.classList.toggle('off', t === 'fill' || t === 'magic'); stamps.classList.toggle('hidden-row', t !== 'stamp'); };
+  const setTool = t => {
+    tool = t;
+    for (const [k, b] of Object.entries(toolBtns)) {
+      b.classList.toggle('sel', k === t);
+      b.setAttribute('aria-pressed', String(k === t));
+    }
+    sizes.classList.toggle('off', t === 'fill' || t === 'magic'); stamps.classList.toggle('hidden-row', t !== 'stamp');
+  };
   // На виду — только главное: заливка, кисть, ластик (большой «шаг назад» — вверху). Остальное — под кнопкой «ещё».
   const more = h('div', { class: 'board-tools more-row hidden-row' }), modes = h('div', { class: 'board-tools' });
-  const tool3 = (t, icon, label) => (toolBtns[t] = h('button', { class: 'tool-btn' + (t === 'fill' ? ' sel' : ''), 'aria-label': label, onclick: () => { sfx('tap'); setTool(t); } }, icon));
-  tools.append(tool3('fill', '🪣', 'заливка'), tool3('brush', '🖌️', 'кисть'), tool3('erase', '🧽', 'ластик'), sizes);
+  const tool3 = (t, icon, label) => (toolBtns[t] = h('button', { class: 'tool-btn' + (t === 'fill' ? ' sel' : ''), 'aria-label': label, title: label, 'aria-pressed': String(t === 'fill'), onclick: () => { sfx('tap'); setTool(t); } }, icon));
+  tools.append(tool3('fill', '🪣', 'заливка'), tool3('brush', '🖌️', 'кисть'), tool3('crayon', '🖍️', 'восковой мелок'), tool3('erase', '🧽', 'ластик'), sizes);
   [[12, 's'], [26, 'm'], [46, 'l']].forEach(([sz, k]) => { const b = h('button', { class: `size size-${k}` + (sz === size ? ' sel' : ''), 'aria-label': 'толщина кисти', onclick: () => { size = sz; pickOne(sizes, 'size', b); } }, h('i')); sizes.append(b); });
   const moreBtn = h('button', { class: 'tool-btn more-btn', 'aria-label': 'ещё', onclick: () => { sfx('tap'); more.classList.toggle('hidden-row'); moreBtn.classList.toggle('sel', !more.classList.contains('hidden-row')); } }, '➕');
   more.append(tool3('magic', '🪄', 'волшебная палочка: цвет как на картинке'), tool3('stamp', '⭐', 'наклейки'), h('button', { class: 'tool-btn', 'aria-label': 'вернуть', onclick: stepForward }, '↪️'));

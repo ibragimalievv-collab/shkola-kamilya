@@ -76,7 +76,7 @@ export function makeBoard({ colors = true, brush = 16, onStroke, editing = false
     if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 3) return;
     cur.pts.push(p);
     seg(cur, last, p);
-    onStroke?.(p);
+    onStroke?.(p, last);
   });
   const up = e => { if (cur && e.pointerId === pointer) { pointer = null; cur = null; api.onUp?.(); } };
   ink.addEventListener('pointerup', up);
@@ -93,7 +93,15 @@ export function makeBoard({ colors = true, brush = 16, onStroke, editing = false
     },
     clear() { if (strokes.length && editing) remember({ cleared: [...strokes] }); strokes.length = 0; redraw(); api.onClear?.(); },
     // Добавить линию программно (нужно для показа ответа и самопроверки).
-    addStroke(pts, col = '#2a9d8f') { const s = { color: col, size, pts }; strokes.push(s); redraw(); pts.forEach(p => onStroke?.(p)); },
+    addStroke(pts, col = '#2a9d8f') {
+      const stroke = { color: col, size, pts };
+      strokes.push(stroke);
+      pts.forEach((point, i) => {
+        seg(stroke, pts[i - 1] || point, point);
+        onStroke?.(point, pts[i - 1]);
+      });
+      api.onUp?.();
+    },
     // Рисунок без фона, обрезанный по краям — чтобы нарисованный герой мог жить на карте и в задачах.
     cutout(max = 200) {
       const xs = strokes.flatMap(s => s.pts.map(p => p[0])), ys = strokes.flatMap(s => s.pts.map(p => p[1]));
@@ -194,7 +202,7 @@ export function drawGuide(board, { text, shape }) {
     ctx.fillStyle = '#38b000'; ctx.beginPath(); ctx.arc(a[0], a[1], 16, 0, 7); ctx.fill();
     ctx.font = '40px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (Math.hypot(a[0] - z[0], a[1] - z[1]) > 30) ctx.fillText('⭐', z[0], z[1]);
-    return { pts: alongPath(path), R: 34, need: 0.9, path };
+    return { pts: alongPath(path), R: 34, need: 0.9, path, sampleStrokes: [path] };
   }
   const s = fitFont(ctx, text, W, H);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -210,8 +218,20 @@ export function drawGuide(board, { text, shape }) {
   o.font = ctx.font; o.textAlign = 'center'; o.textBaseline = 'middle';
   o.fillText(text, W / 2, H / 2);
   const data = o.getImageData(0, 0, W, H).data, pts = [], step = Math.max(5, Math.round(s / 34));
-  for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step) if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y]);
-  return { pts, R: Math.max(13, s * 0.085), need: 0.82 };
+  const left = (W - o.measureText(text).width) / 2;
+  const edges = Array.from(text, (_, i) => left + o.measureText(text.slice(0, i + 1)).width);
+  const groups = [], sampleStrokes = [];
+  for (let y = 0; y < H; y += step) {
+    let stroke = null, letter = 0;
+    for (let x = 0; x < W; x += step) {
+      while (letter < edges.length - 1 && x >= edges[letter]) letter++;
+      if (data[(y * W + x) * 4 + 3] <= 128) { stroke = null; continue; }
+      if (!stroke) { stroke = []; sampleStrokes.push(stroke); }
+      const point = [x, y];
+      pts.push(point); stroke.push(point); groups.push(letter);
+    }
+  }
+  return { pts, R: Math.max(step * 1.5, s * 0.085), need: 0.82, groups, sampleStrokes };
 }
 
 // Линейки для письма без образца.
@@ -225,19 +245,77 @@ export function drawLines(board) {
 
 // Счётчик обводки: сколько точек мишени уже закрашено.
 export function makeCoverage(target) {
-  const done = new Uint8Array(target.pts.length);
-  let n = 0;
-  return {
-    add([x, y]) {
-      const R2 = target.R * target.R;
-      for (let i = 0; i < target.pts.length; i++) {
-        if (done[i]) continue;
-        const dx = target.pts[i][0] - x, dy = target.pts[i][1] - y;
-        if (dx * dx + dy * dy <= R2) { done[i] = 1; n++; }
+  const { pts, R, groups } = target;
+  const done = new Uint8Array(pts.length), totals = [], hits = [];
+  // Проверяем только точки в соседних ячейках, в том числе уже обведённые.
+  const cells = new Map(), key = (x, y) => x + ',' + y;
+  pts.forEach(([x, y], i) => {
+    const cell = key(Math.floor(x / R), Math.floor(y / R));
+    if (!cells.has(cell)) cells.set(cell, []);
+    cells.get(cell).push(i);
+    if (groups) totals[groups[i]] = (totals[groups[i]] || 0) + 1;
+  });
+  let n = 0, ink = 0, closeInk = 0;
+  function mark(x, y, weight) {
+    const cx = Math.floor(x / R), cy = Math.floor(y / R);
+    let near = false;
+    for (let row = cy - 1; row <= cy + 1; row++) for (let col = cx - 1; col <= cx + 1; col++) {
+      const cell = cells.get(key(col, row));
+      if (!cell) continue;
+      for (const i of cell) {
+        const dx = pts[i][0] - x, dy = pts[i][1] - y;
+        if (dx * dx + dy * dy > R * R) continue;
+        near = true;
+        if (!done[i]) {
+          done[i] = 1; n++;
+          if (groups) hits[groups[i]] = (hits[groups[i]] || 0) + 1;
+        }
       }
+    }
+    ink += weight;
+    if (near) closeInk += weight;
+  }
+  return {
+    add([x, y], previous) {
+      if (!previous) return mark(x, y, 1);
+      const [px, py] = previous, length = Math.hypot(x - px, y - py);
+      const steps = Math.max(1, Math.ceil(length / (R / 2)));
+      for (let i = 1; i <= steps; i++) mark(px + (x - px) * i / steps, py + (y - py) * i / steps, length / steps);
     },
-    reset() { done.fill(0); n = 0; },
-    get ratio() { return target.pts.length ? n / target.pts.length : 1; },
-    get complete() { return this.ratio >= target.need; },
+    reset() { done.fill(0); hits.length = 0; n = ink = closeInk = 0; },
+    get ratio() { return pts.length ? n / pts.length : 0; },
+    get complete() {
+      return this.ratio >= target.need && closeInk >= ink * (target.precision || 0)
+        && totals.every((total, i) => (hits[i] || 0) >= total * 0.62);
+    },
   };
+}
+
+// При письме без пунктира ребёнок сам выбирает размер и место для строки.
+// Сравниваем форму штрихов с печатным образцом в общих координатах.
+export function matchesCopy(strokes, target) {
+  const bounds = points => {
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const [x, y] of points) {
+      left = Math.min(left, x); top = Math.min(top, y);
+      right = Math.max(right, x); bottom = Math.max(bottom, y);
+    }
+    return { left, top, w: right - left, h: bottom - top };
+  };
+  const from = bounds(strokes.flatMap(s => s.pts)), to = bounds(target.pts);
+  if (from.w < 4 || from.h < 12 || to.w <= 0 || to.h <= 0) return false;
+  // Палец обычно ведут посередине толстой печатной линии.
+  const pad = Math.min(target.R * 0.55, to.w * 0.08, to.h * 0.08);
+  const sx = (to.w - 2 * pad) / from.w, sy = (to.h - 2 * pad) / from.h;
+  if (sx / sy < 0.52 || sx / sy > 1.95) return false;
+  const score = makeCoverage({ ...target, need: 0.78, precision: 0.82 });
+  for (const { pts } of strokes) {
+    let previous;
+    for (const [x, y] of pts) {
+      const point = [to.left + pad + (x - from.left) * sx, to.top + pad + (y - from.top) * sy];
+      score.add(point, previous);
+      previous = point;
+    }
+  }
+  return score.complete;
 }

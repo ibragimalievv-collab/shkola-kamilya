@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ISLANDS, LEVELS } from '../app/js/curriculum.js';
-import { makeTask, buildSession, checkTask, MECHANICS, lineOf, labelOf } from '../app/js/tasks.js';
+import { makeTask, buildSession, checkTask, MECHANICS, lineOf, labelOf, adjust } from '../app/js/tasks.js';
 import { plainText } from '../app/js/audio.js';
 import { makeRng } from '../app/js/util.js';
 
@@ -68,6 +68,18 @@ test('занятие длится 6–10 заданий и возвращает 
     assert.ok(s.length >= 6 && s.length <= 10, `${L.id}: ${s.length}`);
     assert.ok(s.some(t => t.fromWeak), `${L.id}: нет заданий на повторение ошибок`);
     s.forEach(checkTask);
+  }
+});
+
+test('после подсказки задача по своему рисунку сохраняет количество предметов и правильный ответ', () => {
+  const r = makeRng(42);
+  for (const op of ['+', '−']) {
+    const task = adjust(makeTask(['drawtask', op, 5, 2], r), -1, r);
+    for (let drawn = 1; drawn <= task.max; drawn++) {
+      const change = op === '+' ? 2 : Math.min(2, drawn);
+      assert.equal(task.extra(drawn), change);
+      assert.equal(task.ans(drawn), op === '+' ? drawn + change : drawn - change);
+    }
   }
 });
 

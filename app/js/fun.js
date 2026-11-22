@@ -238,8 +238,10 @@ export function placement(x, done) {
     clearTimeout(nextStep);
     store.skipLevels(passed.flatMap(id => ISLANDS.find(i => i.id === id).levels.map(l => l.id)));
     store.profile.placed = true; store.save();
-    screen('rest', hero('happy', 'big bounce'), h('div', { class: 'stars huge', html: passed.length ? passed.map(() => starSVG(true)).join('') : '' }), ibtn('▶', 'дальше', done, 'play'));
-    sfx('star');
+    screen('rest', hero('ok', 'big'), h('h2', {}, 'Разведка закончена'),
+      h('p', {}, passed.length ? 'Знакомых островов: ' + passed.length + '.' : 'Начнём занятия с первого уровня.'),
+      ibtn('▶', 'дальше', done, 'play'));
+    if (passed.length) sfx('star');
     say(passed.length ? P.testDone : P.testNothing);
   };
   const step = () => {
@@ -247,21 +249,26 @@ export function placement(x, done) {
     if (gi >= groups.length) return finish();
     const g = groups[gi], t = makeTask(g.tasks[ti], r);
     let over = false;
-    const root = h('div');
+    const root = h('div'), feedback = h('div', { class: 'lesson-feedback', role: 'status' });
     const go = ok => {
       if (over) return; over = c.locked = true;
       if (ok) { sfx('ok'); if (++ti >= g.tasks.length) { passed.push(g.isl); gi++; ti = 0; } }
-      else { failedLine[g.line] = true; ti = 0; say(P.testNext); } // ошибся — эту линию дальше не проверяем, без подсказок и без огорчения
+      else {
+        failedLine[g.line] = true; ti = 0;
+        feedback.textContent = 'Этот остров оставим для занятий.';
+        say(P.showAgain);
+      }
       nextStep = setTimeout(step, ok ? 700 : 1800);
     };
     const c = { root, rng: r, islandN: 0, locked: false, say, prompt: say, later: (fn, ms) => setTimeout(fn, ms), saveArt() {}, ok: () => go(true), miss: () => go(false) };
-    screen('level', h('div', { class: 'bar' }, ibtn('🗺️', 'закончить', finish, 'small'), hero('ok', 'mini'), h('div', { class: 'progress' }, h('i', { style: `width:${(gi / groups.length) * 100}%` })), ibtn('🔊', 'послушать задание', () => say(t.say), 'speak')), root);
+    screen('level', h('div', { class: 'bar' }, ibtn('🗺️', 'закончить', finish, 'small'), h('strong', {}, 'Разведка · ' + (g.line === 'R' ? 'Чтение' : 'Счёт')), h('div', { class: 'progress' }, h('i', { style: `width:${(gi / groups.length) * 100}%` })), ibtn('🔊', 'послушать задание', () => say(t.say), 'speak')), feedback, root);
     prepare([t.say]);
     renderTask(t, c);
     say(t.say);
   };
   screen('intro', h('div', { class: 'bar' }, ibtn('🗺️', 'пропустить', () => { store.profile.placed = true; store.save(); done(); }, 'small'), h('span', { class: 'grow' }), ibtn('🔊', 'послушать ещё раз', () => say(P.testHello))),
-    h('div', { class: 'intro-body' }, hero('ok', 'mid bounce'), h('div', { class: 'bigpic' }, '🔭')), ibtn('▶', 'начать', step, 'play'));
+    h('div', { class: 'intro-body' }, hero('ok', 'mid bounce'), h('h2', {}, 'Игра-разведка'),
+      h('p', {}, 'Проверим чтение и счёт. Если задание трудное, оставим этот остров для занятий.')), ibtn('▶', 'начать', step, 'play'));
   say(P.testHello);
 }
 

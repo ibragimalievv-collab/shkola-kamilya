@@ -10,7 +10,7 @@ import { toggleRecording } from './record.js';
 import { h, shuffle, range } from './util.js';
 import { sfx } from './audio.js';
 import { P } from './phrases.js';
-import { makeBoard, drawGuide, drawLines, makeCoverage } from './canvas.js';
+import { makeBoard, drawGuide, drawLines, makeCoverage, matchesCopy } from './canvas.js';
 import { animalSVG } from './art.js';
 
 // Кнопка, которая не нажимается, пока ввод закрыт.
@@ -188,23 +188,45 @@ function truefalse(t, c) {
 
 // ---------- 14. Обведи по пунктиру ----------
 function trace(t, c) {
-  let cov = null, done = false;
-  const b = makeBoard({ brush: 28, onStroke: p => { if (!cov || done) return; cov.add(p); if (cov.complete) { done = true; c.ok(); } } });
+  let cov, done = false;
+  const b = makeBoard({ brush: 28, onStroke: (point, previous) => cov?.add(point, previous) });
   const target = drawGuide(b, t);
-  cov = makeCoverage(target);
-  b.onClear = () => cov.reset();
-  c.root.append(b.el);
-  return { reveal: () => {}, auto: () => b.addStroke(target.pts) };
+  cov = makeCoverage({ ...target, precision: 0.82 });
+  const notice = h('span', { class: 'paint-feedback', role: 'status' });
+  b.onUp = () => {
+    if (done || c.locked) return;
+    if (cov.complete) { done = true; c.ok(); }
+    else if (cov.ratio >= target.need) notice.textContent = 'Проверь все части рисунка. Если линия ушла в сторону, сотри её и обведи ещё раз.';
+  };
+  b.onClear = () => { cov.reset(); notice.textContent = ''; };
+  c.root.append(b.el, notice);
+  return { reveal: () => {}, auto: () => target.sampleStrokes.forEach(stroke => b.addStroke(stroke)) };
 }
 
 // ---------- 15. Напиши сам ----------
 function copy(t, c) {
-  const b = makeBoard({ brush: 16 });
+  const b = makeBoard({ brush: 16 }), target = drawGuide(b, t);
   drawLines(b);
-  const need = Math.min(500, 60 + 70 * t.text.replace(/\s/g, '').length);
-  const go = () => { if (b.ink() < need) return c.say(P.needWrite); if (t.text.length > 2) c.saveWord?.(b.dataUrl(), t.text); c.ok(); }; // написанные слова собираются в альбом
-  c.root.append(row('copy-top', h('div', { class: 'sample' }, t.text), check(c, go)), b.el);
-  return { reveal: () => {}, auto: () => { b.addStroke([[20, 20], [20 + need, 20], [20, 60], [20 + need, 60]]); go(); } };
+  const notice = h('span', { class: 'paint-feedback', role: 'status' });
+  const guide = B(c, 'edit-action', 'Показать пунктир', () => {
+    drawGuide(b, t);
+    guide.disabled = true;
+    notice.textContent = 'Обведи образец и нажми галочку.';
+  });
+  const go = () => {
+    if (!b.ink()) { notice.textContent = P.needWrite; return c.say(P.needWrite); }
+    if (!matchesCopy(b.strokes, target)) {
+      notice.textContent = 'Сравни с образцом. Можно стереть и попробовать по пунктиру.';
+      return c.miss();
+    }
+    if (t.text.length > 2) c.saveWord?.(b.dataUrl(), t.text);
+    c.ok();
+  };
+  c.root.append(row('copy-top', h('div', { class: 'sample' }, t.text), check(c, go)), guide, notice, b.el);
+  return {
+    reveal: () => { drawGuide(b, t); },
+    auto: () => { target.sampleStrokes.forEach(stroke => b.addStroke(stroke)); go(); },
+  };
 }
 
 // ---------- 16. Свободный рисунок ----------
@@ -505,9 +527,31 @@ function readaloud(t, c) {
       playMine(() => { if (mic.isConnected && !document.hidden) c.say(t.sample); });
     }, () => { okBtn.disabled = false; c.say(P.noMic); });
   }
-  function finish() { if (blob) c.saveRead?.(blob, t.text); c.ok(); }
-  c.root.append(h('div', { class: 'bigtext' + (t.text.length > 8 ? ' long' : '') }, t.text), mic, row('opts', me, sample, okBtn), B(c, 'edit-action', 'Прочитать без записи', () => c.ok()));
-  return { reveal: () => {}, auto: () => c.ok() };
+  const words = t.text.match(/[а-яё]+/giu);
+  const sentence = words.length > 1;
+  const question = sentence ? 'Каким словом начинается предложение?' : 'На какую букву начинается это слово?';
+  const parts = sentence ? words.map(w => w.toLocaleLowerCase('ru')) : [...words[0].toLocaleUpperCase('ru')];
+  const answer = parts[0], extra = sentence ? ['кот', 'дом', 'сад'] : ['А', 'М', 'О'];
+  const options = shuffle(c.rng, [...new Set([...parts, ...extra])].slice(0, 3));
+  let answers;
+  function finish() {
+    mine.pause();
+    mine.onended = null;
+    if (url) { URL.revokeObjectURL(url); url = null; }
+    answers = options.map(o => B(c, 'opt', face(o), () => {
+      if (o !== answer) return c.miss();
+      if (blob) c.saveRead?.(blob, t.text);
+      c.ok();
+    }));
+    c.root.replaceChildren(h('div', { class: 'question' }, question),
+      h('div', { class: 'bigtext' + (t.text.length > 8 ? ' long' : '') }, t.text), row('opts', ...answers));
+    c.prompt(question);
+  }
+  c.root.append(h('div', { class: 'bigtext' + (t.text.length > 8 ? ' long' : '') }, t.text), mic, row('opts', me, sample, okBtn), B(c, 'edit-action', 'Прочитать без записи', finish));
+  return {
+    reveal: () => { if (answers) answers[options.indexOf(answer)].classList.add('right', 'glow'); },
+    auto: () => { finish(); answers[options.indexOf(answer)].click(); },
+  };
 }
 
 // ---------- 37. Слияние: две буквы сливаются в слог ----------

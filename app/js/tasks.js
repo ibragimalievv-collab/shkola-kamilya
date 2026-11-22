@@ -735,7 +735,7 @@ export function adjust(t, level, r) {
       const keep = [t.opts[t.a], t.opts.find((_, i) => i !== t.a)], sh = shuffle(r, keep);
       t.a = sh.indexOf(keep[0]); t.opts = sh;
     }
-    if (t.extra?.length) t.extra = [];                                              // без лишних букв
+    if (t.m === 'build' && Array.isArray(t.extra)) t.extra = [];                    // без лишних букв
     if (t.items && t.target != null) {                                              // меньше пузырей и рыбок
       const isT = x => String(x).toUpperCase() === String(t.target).toUpperCase();
       t.items = shuffle(r, [...t.items.filter(isT), ...t.items.filter(x => !isT(x)).slice(0, 3)]);

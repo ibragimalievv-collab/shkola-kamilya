@@ -11,10 +11,10 @@ export function heroSVG(c, mood = 'ok') {
   const mouth = mood === 'happy' ? '<path d="M78 116 Q100 146 122 116 Z" fill="#c9184a"/><path d="M90 128 Q100 138 110 128 Q100 124 90 128Z" fill="#ff8fa3"/>'
     : mood === 'sleep' ? '<circle cx="100" cy="122" r="6" fill="#c9184a"/>'
     : '<path d="M84 117 Q100 132 116 117" fill="none" stroke="#2b2d42" stroke-width="5" stroke-linecap="round"/>';
-  return `<svg viewBox="0 0 200 200" class="hero hero-${mood}">
+  return `<svg viewBox="-3 -3 206 206" class="hero hero-${mood}">
     <g data-part="star" fill="${c.star}"><rect x="97" y="14" width="6" height="22" rx="3" fill="#2b2d42"/><polygon points="100,0 105,10 116,11 108,19 110,30 100,24 90,30 92,19 84,11 95,10"/></g>
     <g data-part="ears" fill="${c.ears}"><ellipse cx="48" cy="48" rx="24" ry="30" transform="rotate(-25 48 48)"/><ellipse cx="152" cy="48" rx="24" ry="30" transform="rotate(25 152 48)"/></g>
-    <g data-part="feet" fill="${c.feet}"><ellipse cx="68" cy="184" rx="26" ry="13"/><ellipse cx="132" cy="184" rx="26" ry="13"/><ellipse class="hand hl" cx="24" cy="128" rx="13" ry="20"/><ellipse class="hand hr" cx="176" cy="128" rx="13" ry="20"/></g>
+    <g data-part="feet" fill="${c.feet}"><ellipse cx="62" cy="185" rx="26" ry="14"/><ellipse cx="138" cy="185" rx="26" ry="14"/><ellipse class="hand hl" cx="24" cy="128" rx="13" ry="20"/><ellipse class="hand hr" cx="176" cy="128" rx="13" ry="20"/></g>
     <path data-part="body" fill="${c.body}" d="M100 30 C152 30 178 70 178 116 C178 166 146 188 100 188 C54 188 22 166 22 116 C22 70 48 30 100 30Z"/>
     <ellipse data-part="belly" fill="${c.belly}" cx="100" cy="146" rx="46" ry="34"/>
     <circle cx="58" cy="112" r="10" fill="#ff8fa3" opacity=".7"/><circle cx="142" cy="112" r="10" fill="#ff8fa3" opacity=".7"/>

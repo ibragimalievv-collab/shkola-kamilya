@@ -134,16 +134,34 @@ function paintHero(done, back = map) {
     }
     hint.textContent = enabled ? 'Нажми на часть героя, чтобы вернуть её исходный цвет.' : 'Выбери цвет и нажми на героя.';
   };
-  const redraw = () => { box.innerHTML = heroSVG(draft, 'happy'); undo.disabled = !history.length; };
-  box.addEventListener('click', e => {
-    const part = e.target.closest('[data-part]')?.dataset.part;
-    if (!part || !HERO_PARTS.includes(part)) return;
+  const partNames = { body: 'Туловище', belly: 'Животик', ears: 'Ушки', feet: 'Лапки', star: 'Звезда' };
+  const redraw = () => {
+    box.innerHTML = heroSVG(draft, 'happy');
+    for (const piece of box.querySelectorAll('[data-part]')) {
+      piece.setAttribute('role', 'button');
+      piece.setAttribute('tabindex', '0');
+      piece.setAttribute('aria-label', partNames[piece.dataset.part]);
+    }
+    undo.disabled = !history.length;
+  };
+  const fillPart = part => {
+    if (!HERO_PARTS.includes(part)) return;
     const value = erasing ? HERO_DEFAULT[part] : color;
     if (draft[part] === value) return;
     history.push({ part, before: draft[part] });
     draft[part] = value;
     sfx('pop');
     redraw();
+  };
+  redraw();
+  box.addEventListener('click', e => fillPart(e.target.closest('[data-part]')?.dataset.part));
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const part = e.target.dataset.part;
+    if (!part) return;
+    e.preventDefault();
+    fillPart(part);
+    box.querySelector('[data-part="' + part + '"]').focus();
   });
   const colors = [...PALETTE, ...store.part('gifts', { colors: [], badges: [], last: 0 }).colors]; // плюс краски-сюрпризы
   const pal = h('div', { class: 'palette' }, colors.map(c => {
@@ -173,13 +191,14 @@ function map() {
     const got = isl.levels.filter(l => store.stars(l.id)).length;
     return h('button', { class: `island${open ? '' : ' locked'}${done ? ' done' : ''}${next && next.island === isl.n ? ' here' : ''}`, style: `--col:${LINE_COLOR[isl.line]}`,
       'aria-label': isl.title, onclick: () => { sfx('tap'); open ? island(isl) : explain(store.profile.overrides[isl.id] === 'closed' ? 'Этот остров закрыт в настройках для родителей.' : P.islandLocked); } },
-      h('span', { class: 'inum' }, isl.n + 1),
+      h('span', { class: 'island-art' }, h('span', { class: 'inum' }, isl.n + 1),
       h('span', { html: islandSVG(isl.line, !open) }),
       islandRewardOpen(store, isl) ? h('img', { class: 'isticker reward-thumb', src: artForIsland(isl).src, alt: '' })
         : !open ? h('span', { class: 'lock' }, '🔒') : null,
       next && next.island === isl.n ? h('span', { class: 'boat', html: heroSVG(store.profile.hero, 'happy') }) : null,
       next && next.island === isl.n ? petImg(store, 'pet onmap') : null,
-      h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` })));
+      h('span', { class: 'iprog' }, h('i', { style: `width:${(got / isl.levels.length) * 100}%` }))),
+      h('span', { class: 'island-name' }, isl.title));
   });
   const sea = h('div', { id: 'island-map', class: 'sea compact' }, cards);
   const locked = cards.filter(card => card.classList.contains('locked')).length;
@@ -192,27 +211,31 @@ function map() {
   const hi = helloText() + (days >= 2 ? ' ' + P.streak(days) : '');
   if (next) { loadPack(ISLANDS[next.island].id); const after = ISLANDS[next.island + 1]; if (after) loadPack(after.id); } // подгружаем голос для ближайших островов
   const pens = penCount(store);
+  const place = (icon, label, name, action, state = '') => {
+    const button = ibtn(icon, label, action, 'place ' + state);
+    button.append(h('span', {}, name));
+    return button;
+  };
   screen('map',
     h('div', { class: 'bar' },
       h('button', { class: 'hero-btn', 'aria-label': 'помощник', onclick: () => say(hi) }, hero('ok')),
       h('span', { class: 'score' }, h('span', { html: starSVG(true) }), totalStars()),
       days ? h('button', { class: 'score chain', 'aria-label': 'дней подряд', onclick: () => say(P.streak(days)) }, '🔥', days) : null,
       h('span', { class: 'grow' }),
-      ibtn('📚', 'книжки', () => library(X, map), booksOpen(store) > Object.keys(store.part('books', {})).length ? 'badge' : ''),
-      ibtn('🏠', 'домик', () => homeScreen(X, map), fresh ? 'badge' : ''),
-      ibtn('✍️', 'пишу ручкой', () => penScreen({ store, app, back: map, hero }), pens ? 'badge' : ''),
-      ibtn('🏆', 'мои объёмные рисунки', collection)),
-
-    h('div', { class: 'bar places' },
-      ibtn('✉️', 'письма от Лумика', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
-      ibtn('🛒', 'магазин игрушек', () => shopOpen(store) ? shopScreen(X, map) : explain(P.shopLocked), shopOpen(store) ? '' : 'dim'),
-      ibtn('🤝', 'игра вдвоём', () => duoScreen(X, map)),
-      ibtn('🎨', 'раскраски', () => photoScreen(X, map)),
-      // Кнопка для взрослых — с подписью, чтобы родители сразу видели, куда им заходить (внутри — задачка на умножение).
       h('button', { class: 'parent-btn', 'aria-label': 'настройки для родителей', onclick: () => { sfx('tap'); openParent({ store, app, back: map, repaint: () => paintHero(map), editDrawnHero, placement: () => placement(X, map) }); } },
         h('span', {}, '⚙️'), h('span', { class: 'parent-txt' }, h('b', {}, 'Настройки'), h('small', {}, 'для родителей')))),
     next ? h('button', { class: 'map-next', 'aria-label': 'играть дальше', onclick: () => { sfx('tap'); playLevel(next); } },
-      '▶ Продолжить', h('small', {}, next.title)) : null, notice, sea, locked ? fold : null);
+      '▶ Продолжить', h('small', {}, next.title)) : null,
+    h('nav', { class: 'places', 'aria-label': 'Разделы игры' },
+      place('📚', 'книжки', 'Книжки', () => library(X, map), booksOpen(store) > Object.keys(store.part('books', {})).length ? 'badge' : ''),
+      place('🏠', 'домик', 'Домик', () => homeScreen(X, map), fresh ? 'badge' : ''),
+      place('✍️', 'пишу ручкой', 'Пишу ручкой', () => penScreen({ store, app, back: map, hero }), pens ? 'badge' : ''),
+      place('🏆', 'мои объёмные рисунки', 'Мои награды', collection),
+      place('✉️', 'письма от Лумика', 'Письма', () => mailScreen(X, map), mailWaiting(store) >= 0 ? 'badge' : ''),
+      place('🛒', 'магазин игрушек', 'Магазин', () => shopOpen(store) ? shopScreen(X, map) : explain(P.shopLocked), shopOpen(store) ? '' : 'dim'),
+      place('🤝', 'игра вдвоём', 'Вдвоём', () => duoScreen(X, map)),
+      place('🎨', 'раскраски', 'Раскраски', () => photoScreen(X, map))),
+    notice, sea, locked ? fold : null);
   if (!greeted) { greeted = true; say(hi); }
 }
 
@@ -320,20 +343,27 @@ function islandReward(isl, back, compact = false) {
 }
 
 function island(isl) {
+  const notice = h('p', { class: 'map-note', role: 'status' });
   const nodes = isl.levels.map((L, i) => {
     const open = store.isOpen(L), st = store.stars(L.id);
     return h('button', { class: `node${open ? '' : ' locked'}${st ? ' done' : ''}${L.review ? ' review' : ''}${st === 1 ? ' one-star' : ''}`,
       'aria-label': st === 1 ? L.title + '. Одна звезда, можно улучшить' : L.title,
-      onclick: () => { sfx('tap'); open ? playLevel(L) : say(P.levelLocked); } },
-      h('b', {}, L.review ? (i === isl.levels.length - 1 ? '🎁' : '🔁') : i + 1), open ? stars3(st) : h('span', { class: 'lock' }, '🔒'));
+      onclick: () => {
+        sfx('tap');
+        if (open) return playLevel(L);
+        notice.textContent = P.levelLocked; say(P.levelLocked);
+      } },
+      h('b', {}, L.review ? (i === isl.levels.length - 1 ? '🎁' : '🔁') : i + 1),
+      h('span', { class: 'node-name' }, L.title), open ? stars3(st) : h('span', { class: 'lock' }, '🔒'));
   });
   screen('island-view', h('div', { class: 'bar' }, ibtn('🗺️', 'на карту', map), h('span', { class: 'grow' }),
     ibtn('🔊', 'название острова', () => say(isl.title))),
   h('div', { class: 'ihead', style: `--col:${LINE_COLOR[isl.line]}` }, h('span', { html: islandSVG(isl.line) })),
+  h('h1', { class: 'island-heading' }, isl.title),
   firstBookCard(X, isl, () => island(isl)),
   islandReward(isl, () => island(isl)),
   storyStrip(X, isl),
-  h('div', { class: 'path' }, nodes),
+  notice, h('div', { class: 'path' }, nodes),
   store.islandDone(isl) && !store.part('shown', {})[isl.id] ? ibtn('👨‍👩‍👦', 'покажи папе', () => showDad(X, isl, () => island(isl)), 'play') : null);
   say(isl.title);
 }
@@ -356,16 +386,16 @@ function playLevel(level) {
   loadPack(isl.id);
   if (isl.id === 'r1' && level === isl.levels.at(-1)) loadPack('books');
   const r = makeRng(Date.now() % 2147483647);
-  const queue = buildSession(level, store.weakList(), r);
+  const tasks = buildSession(level, store.weakList(), r);
   const fam = store.part('family', []);
   if (fam.length && 'RW'.includes(isl.line) && !level.demo && Math.random() < 0.6) { // своё слово семьи — не чаще одного на уровень
     const word = fam[Math.floor(Math.random() * fam.length)];
-    queue.splice(Math.min(2, queue.length), 0, makeTask(['famW', word, Math.random() < 0.5 ? 'pick' : 'build', fam.filter(w => w !== word).slice(0, 3)], r));
+    tasks.splice(Math.min(2, tasks.length), 0, makeTask(['famW', word, Math.random() < 0.5 ? 'pick' : 'build', fam.filter(w => w !== word).slice(0, 3)], r));
   }
-  prepare([level.intro, ...queue.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...queue.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
-  const total = queue.length;
+  prepare([level.intro, ...tasks.flatMap(t => [t.say, t.ask, t.text]).filter(x => typeof x === 'string'), ...tasks.flatMap(t => (t.m === 'story' ? t.text : []))]); // подгружаем записи для этого уровня
+  const total = tasks.length;
   let firstTry = 0, solved = 0, misses = 0, t0 = lessonClock(), alive = true;
-  let ease = 0, okRow = 0, failRow = 0; // подстройка сложности: -1 проще, 0 как есть, +1 труднее
+  let ease = 0, okRow = 0; // подстройка сложности: -1 проще, 0 как есть, +1 труднее
   const leave = () => { alive = false; store.addTime((lessonClock() - t0) / 1000); island(isl); };
 
   // Объяснение перед заданиями.
@@ -378,59 +408,68 @@ function playLevel(level) {
 
   function next() {
     if (!alive) return;
-    if (!queue.length) return finish();
-    run(queue.shift());
+    if (solved === total) return finish();
+    run(tasks[solved]);
   }
 
-  function run(t) {
-    if (!t.adjusted && ease) adjust(t, ease, r);
+  function run(t, retry = false) {
+    if (!retry && ease) adjust(t, ease, r);
     let m = 0, ended = false, prompt = t.say, mech = null;
     const root = h('div'), buddy = hero('ok', 'mini');
+    const feedback = h('div', { class: 'lesson-feedback', role: 'status' });
     const mood = x => { buddy.innerHTML = heroSVG(store.profile.hero, x); };
     const c = {
       root, rng: r, islandN: level.island, locked: false, say,
       prompt(x) { prompt = x; say(x); },
-      later: (fn, ms) => setTimeout(fn, ms),
+      later: (fn, ms) => setTimeout(() => { if (alive && !ended && root.isConnected) fn(); }, ms),
       saveArt: url => keepArt(store, url),
       saveRead, myPic: store.profile.pet?.img || null,
       saveWord: (u, text) => { const w = store.part('words', []); w.unshift({ u, t: text }); w.length = Math.min(w.length, 12); store.save(); },
       ok(delay = 1100) {
-        if (ended) return;
+        if (ended || !alive || !root.isConnected) return;
         ended = c.locked = true;
+        feedback.replaceChildren();
         sfx('ok'); mood('happy'); buddy.classList.add('bounce');
         // Хвалим голосом не каждый раз, а примерно через раз — и только за ответ без ошибок.
-        if (m === 0 && delay === 1100 && (solved + misses) % 2 === 0) { say(praise()); delay = 2000; }
-        if (m === 0 && (t.fromWeak || t.retry)) store.fixWeak(t.src);
+        const unassisted = m === 0 && !retry;
+        if (unassisted && delay === 1100 && (solved + misses) % 2 === 0) { say(praise()); delay = 2000; }
+        if (unassisted && t.fromWeak) store.fixWeak(t.src);
         // Серия верных ответов с первой попытки — можно чуть труднее; после упрощения возвращаемся к обычному.
-        if (m === 0) { okRow++; failRow = 0; if (ease < 0 && okRow >= 3) ease = 0; else if (ease === 0 && okRow >= 5) ease = 1; } else { okRow = 0; if (ease > 0) ease = 0; }
-        if (!t.retry && m === 0) firstTry++;
+        if (unassisted) { firstTry++; okRow++; if (ease < 0 && okRow >= 3) ease = 0; else if (ease === 0 && okRow >= 5) ease = 1; } else { okRow = 0; if (ease > 0) ease = 0; }
         solved++;
         setTimeout(next, delay);
       },
       miss() {
-        if (ended) return;
+        if (ended || !alive || !root.isConnected) return;
         m++; misses++; sfx('miss'); mood('think');
-        if (m === 1) return say(pickNew(HINTS, 'hint'));
-        // Вторая ошибка: показываем верный ответ и вернём такое же задание чуть позже.
+        if (m === 1) {
+          feedback.textContent = 'Попробуй ещё раз.';
+          return say(pickNew(HINTS, 'hint'));
+        }
+        // Подсказка может изменить состояние кнопок. Новая попытка заново рисует тот же вопрос.
         ended = c.locked = true;
         mech.reveal();
         say(pickNew(REVEAL, 'reveal'));
-        store.addWeak(t.src);
-        okRow = 0; if (++failRow >= 1 || ease > 0) ease = Math.max(-1, ease - 1); // не получилось — дальше задания попроще
-        if (!t.retry) { const again = makeTask(t.src, r); again.retry = true; queue.push(again); }
-        setTimeout(next, 3200);
+        if (!retry) store.addWeak(t.src);
+        okRow = 0; ease = -1;
+        const again = h('button', { type: 'button', class: 'edit-action', onclick: () => {
+          if (alive && root.isConnected) run(t, true);
+        } }, 'Попробовать ещё раз');
+        feedback.replaceChildren(h('span', {}, 'Взгляни на подсказку.'), again);
+        again.focus({ preventScroll: true });
       },
     };
-    const done = solved / (solved + queue.length + 1);
+    const done = solved / total;
     screen('level', h('div', { class: 'bar' }, twice(ibtn('🏠', 'выйти: нажать два раза', leave), () => say(P.exitTwice)), buddy, h('div', { class: 'progress' }, h('i', { style: `width:${done * 100}%` })),
-      ibtn('🔊', 'послушать задание', () => say(prompt), 'speak')), root);
+      ibtn('🔊', 'послушать задание', () => say(prompt), 'speak')), feedback, root);
     mech = renderTask(t, c);
     say(t.say);
   }
 
   function finish() {
+    alive = false;
     if (level.demo) return map();
-    const stars = misses <= 1 ? 3 : misses <= 4 ? 2 : 1;
+    const stars = misses === 0 ? 3 : misses <= 4 ? 2 : 1;
     store.addTime((lessonClock() - t0) / 1000);
     const first = !store.stars(level.id);
     const wasReady = islandRewardOpen(store, isl);

@@ -2,7 +2,7 @@
 // после этого всё берётся из сохранённой копии. Приложение ни к каким чужим адресам не обращается.
 
 // При любом изменении файлов приложения увеличьте номер версии — устройства скачают обновление.
-const VERSION = 'shkola-kamilya-39';
+const VERSION = 'shkola-kamilya-40';
 const FILES = [
   './', 'index.html', 'privacy.html', 'install.html', 'manifest.webmanifest', 'css/style.css', 'css/install.css',
   'qr.html', 'css/qr.css', 'js/progress.js', 'js/progress-receive.js', 'js/qr.js', 'js/vendor/qrcode.mjs', 'js/vendor/qrcode-license.txt',
